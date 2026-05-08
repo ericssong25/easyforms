@@ -1,27 +1,6 @@
 import { NextResponse } from "next/server";
 
-async function getBrowser() {
-  // On Netlify / serverless — use @sparticuz/chromium-min
-  if (process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY) {
-    const puppeteer = await import("puppeteer-core");
-    const chromium = (await import("@sparticuz/chromium-min")).default;
-    return await puppeteer.default.launch({
-      args: chromium.args,
-      executablePath: await chromium.executablePath(),
-      headless: true,
-    });
-  }
-
-  // Local dev — use bundled Chromium
-  const puppeteer = await import("puppeteer");
-  return await puppeteer.default.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
-}
-
 export async function POST(request: Request) {
-  let browser;
   try {
     const { html, signature } = await request.json();
 
@@ -80,22 +59,39 @@ Signed on: ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString
 </body>
 </html>`;
 
-    browser = await getBrowser();
+    const token = process.env.BROWSERLESS_TOKEN;
 
-    const page = await browser.newPage();
-    await page.setContent(fullHtml, {
-      waitUntil: "networkidle0",
-      timeout: 15000,
-    });
+    if (!token) {
+      return NextResponse.json(
+        {
+          error:
+            "BROWSERLESS_TOKEN environment variable is not set. Get one at https://browserless.io",
+        },
+        { status: 500 }
+      );
+    }
 
-    const pdf = await page.pdf({
-      format: "A4",
-      margin: { top: "20mm", right: "20mm", bottom: "20mm", left: "20mm" },
-      printBackground: true,
-      preferCSSPageSize: false,
-    });
+    const browserlessRes = await fetch(
+      `https://chrome.browserless.io/pdf?token=${token}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "text/html" },
+        body: fullHtml,
+      }
+    );
 
-    const base64 = Buffer.from(pdf).toString("base64");
+    if (!browserlessRes.ok) {
+      const errText = await browserlessRes.text();
+      console.error("Browserless error:", browserlessRes.status, errText);
+      return NextResponse.json(
+        { error: `Browserless returned ${browserlessRes.status}` },
+        { status: 500 }
+      );
+    }
+
+    const pdfBuffer = Buffer.from(await browserlessRes.arrayBuffer());
+    const base64 = pdfBuffer.toString("base64");
+
     return NextResponse.json({ pdf: base64 });
   } catch (error) {
     console.error("PDF generation error:", error);
@@ -106,7 +102,5 @@ Signed on: ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString
       },
       { status: 500 }
     );
-  } finally {
-    if (browser) await browser.close();
   }
 }
