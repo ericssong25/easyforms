@@ -75,8 +75,13 @@ Signed on: ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString
       `https://chrome.browserless.io/pdf?token=${token}`,
       {
         method: "POST",
-        headers: { "Content-Type": "text/html" },
-        body: fullHtml,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          html: fullHtml,
+          options: {
+            printBackground: true,
+          },
+        }),
       }
     );
 
