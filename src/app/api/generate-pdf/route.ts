@@ -1,5 +1,24 @@
 import { NextResponse } from "next/server";
-import puppeteer from "puppeteer";
+
+async function getBrowser() {
+  // On Netlify / serverless — use @sparticuz/chromium-min
+  if (process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY) {
+    const puppeteer = await import("puppeteer-core");
+    const chromium = (await import("@sparticuz/chromium-min")).default;
+    return await puppeteer.default.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
+      headless: true,
+    });
+  }
+
+  // Local dev — use bundled Chromium
+  const puppeteer = await import("puppeteer");
+  return await puppeteer.default.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
+}
 
 export async function POST(request: Request) {
   let browser;
@@ -30,33 +49,17 @@ export async function POST(request: Request) {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  .prose {
-    max-width: none;
-    color: #1a3a5c;
-  }
-  .prose h1, .prose h2, .prose h3, .prose h4 {
-    color: #1a3a5c;
-  }
+  .prose { max-width: none; color: #1a3a5c; }
+  .prose h1, .prose h2, .prose h3, .prose h4 { color: #1a3a5c; }
   .prose-sm { font-size: 0.875rem; }
   .prose ul { list-style-type: disc; padding-left: 1.625em; }
   .prose ol { list-style-type: decimal; padding-left: 1.625em; }
   .prose li { margin-top: 0.25em; margin-bottom: 0.25em; }
   .prose img { max-width: 100%; height: auto; }
   .leading-snug { line-height: 1.375; }
-  .bg-white { background-color: #ffffff; }
-  .text-navy, [style*="color"] { } /* preserve inline colors */
-  /* Ensure inline styles are respected */
   * { box-sizing: border-box; }
-  /* Signature section */
-  .signature-block {
-    margin-top: 30px;
-    border-top: 1px solid #e2e8f0;
-    padding-top: 20px;
-  }
-  .signature-block img {
-    max-width: 200px;
-    height: auto;
-  }
+  .signature-block { margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+  .signature-block img { max-width: 200px; height: auto; }
 </style>
 </head>
 <body>
@@ -77,10 +80,7 @@ Signed on: ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString
 </body>
 </html>`;
 
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
+    browser = await getBrowser();
 
     const page = await browser.newPage();
     await page.setContent(fullHtml, {
@@ -96,7 +96,6 @@ Signed on: ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString
     });
 
     const base64 = Buffer.from(pdf).toString("base64");
-
     return NextResponse.json({ pdf: base64 });
   } catch (error) {
     console.error("PDF generation error:", error);
