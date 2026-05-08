@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Lock, Eye, EyeOff, Shield, FileText } from "lucide-react";
@@ -16,7 +16,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { VerifyMFA } from "@/components/auth/verify-mfa";
 import { toast } from "sonner";
+
+type LoginStep = "credentials" | "mfa" | "checking";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -24,6 +27,28 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<LoginStep>("checking");
+
+  useEffect(() => {
+    (async () => {
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        setStep("credentials");
+        return;
+      }
+      const { data: aal } =
+        await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aal && aal.nextLevel === "aal2" && aal.currentLevel !== aal.nextLevel) {
+        setStep("mfa");
+      } else {
+        router.push("/dashboard");
+        router.refresh();
+      }
+    })();
+  }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,6 +63,14 @@ export default function LoginPage() {
 
       if (error) throw error;
 
+      const { data: aal } =
+        await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+
+      if (aal && aal.nextLevel === "aal2" && aal.currentLevel !== aal.nextLevel) {
+        setStep("mfa");
+        return;
+      }
+
       toast.success("Signed in successfully");
       router.push("/dashboard");
       router.refresh();
@@ -49,6 +82,52 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  const handleMfaVerified = () => {
+    toast.success("Signed in successfully");
+    router.push("/dashboard");
+    router.refresh();
+  };
+
+  if (step === "checking") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-navy/5 via-background to-slate-blue/5 px-4">
+        <div className="flex flex-col items-center gap-4">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-navy text-white">
+            <FileText className="h-6 w-6" />
+          </div>
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "mfa") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-navy/5 via-background to-slate-blue/5 px-4">
+        <div className="w-full max-w-md">
+          <div className="mb-8 text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-navy text-white">
+              <FileText className="h-6 w-6" />
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-navy">
+              Easy Forms
+            </h1>
+          </div>
+
+          <Card className="border-slate-200 shadow-lg">
+            <CardContent className="pt-6">
+              <VerifyMFA onVerified={handleMfaVerified} />
+            </CardContent>
+          </Card>
+
+          <p className="mt-6 text-center text-xs text-muted-foreground">
+            Having trouble? Contact your administrator for help.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-navy/5 via-background to-slate-blue/5 px-4">

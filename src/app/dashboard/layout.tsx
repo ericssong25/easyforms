@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
 import { DashboardHeader } from "@/components/dashboard/header";
+import { MfaBanner } from "@/components/auth/mfa-banner";
 
 export default async function DashboardLayout({ children }: PropsWithChildren) {
   const supabase = await createClient();
@@ -26,6 +27,7 @@ export default async function DashboardLayout({ children }: PropsWithChildren) {
       <DashboardSidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <DashboardHeader user={user} agent={agent} />
+        <MfaBanner />
         <main className="flex-1 overflow-auto bg-muted/30 p-4 sm:p-6">
           {children}
         </main>

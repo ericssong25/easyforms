@@ -11,7 +11,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { LogOut } from "lucide-react";
+import { LogOut, Shield, UserCircle } from "lucide-react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { MobileNavSheet } from "@/components/dashboard/sidebar";
 import type { Agent } from "@/lib/types";
@@ -77,6 +78,18 @@ export function DashboardHeader({ user, agent }: DashboardHeaderProps) {
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          <DropdownMenuItem asChild className="cursor-pointer gap-2">
+            <Link href="/dashboard/profile">
+              <UserCircle className="h-4 w-4" />
+              Profile
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild className="cursor-pointer gap-2">
+            <Link href="/dashboard/security">
+              <Shield className="h-4 w-4" />
+              Security
+            </Link>
+          </DropdownMenuItem>
           <DropdownMenuItem
             onClick={handleSignOut}
             className="cursor-pointer gap-2"

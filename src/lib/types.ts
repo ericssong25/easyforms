@@ -6,6 +6,7 @@ export interface Agent {
   full_name: string;
   agency_name: string;
   npn: string;
+  phone: string;
 }
 
 export interface Client {
