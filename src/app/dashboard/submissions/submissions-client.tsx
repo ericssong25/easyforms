@@ -159,7 +159,7 @@ export function SubmissionsClient({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="mt-4">
+          <div className="mt-4 max-h-[60vh] overflow-y-auto pr-1">
             {loadingEvents ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 Loading...
