@@ -134,7 +134,7 @@ function isValidSsn(ssn: string): boolean {
   return digits.length === 9;
 }
 
-export function ClientWizard() {
+export function ClientWizard({ resumeClientId }: { resumeClientId?: string }) {
   const router = useRouter();
   const supabase = createClient();
   const [step, setStep] = useState(1);
@@ -191,6 +191,50 @@ export function ClientWizard() {
   const [dependents, setDependents] = useState<DependentForm[]>([]);
   const [clientId, setClientId] = useState<string | null>(null);
   const [policyId, setPolicyId] = useState<string | null>(null);
+
+  // Resume: load existing client data and skip to policy step
+  useEffect(() => {
+    if (!resumeClientId) return;
+    const load = async () => {
+      const { data: c } = await supabase
+        .from("clients")
+        .select("*, policies!clients_policy_id_fkey(*)")
+        .eq("id", resumeClientId)
+        .single();
+      if (!c) return;
+
+      setClientId(c.id);
+      setClientForm({
+        first_name: c.first_name || "",
+        last_name: c.last_name || "",
+        ssn: c.ssn_encrypted ? String(c.ssn_encrypted) : "",
+        applies_to_policy: c.applies_to_policy || false,
+        email: c.email || "",
+        phone: c.phone ? String(c.phone) : "",
+        address: c.address || "",
+        city: c.city || "",
+        state: c.state || "",
+        zip: c.zip || "",
+        date_of_birth: c.date_of_birth ? String(c.date_of_birth) : "",
+      });
+
+      if (c.policies) {
+        setPolicyId(c.policies.id);
+        setPolicyForm({
+          carrier: c.policies.carrier || "",
+          plan: c.policies.plan || "",
+          policy_number: c.policies.policy_number || "",
+          premium: Number(c.policies.premium) || 0,
+          effective_date: c.policies.effective_date ? String(c.policies.effective_date) : "",
+        });
+        setStep(3);
+      } else {
+        setStep(2);
+      }
+    };
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeClientId]);
 
   const markTouched = (field: string) => {
     setTouched((prev) => new Set(prev).add(field));
@@ -385,8 +429,8 @@ export function ClientWizard() {
     }
 
     if (dependents.length === 0) {
-      toast.success("Client and policy saved. Redirecting...");
-      router.push("/dashboard/clients");
+      toast.success(`Redirecting to ${clientForm.first_name}'s profile...`);
+      router.push(`/dashboard/clients/${clientId}`);
       router.refresh();
       return;
     }
@@ -408,8 +452,8 @@ export function ClientWizard() {
         if (error) throw error;
       }
 
-      toast.success("Client, policy, and dependents saved successfully");
-      router.push("/dashboard/clients");
+      toast.success(`Saved! Redirecting to ${clientForm.first_name}'s profile...`);
+      router.push(`/dashboard/clients/${clientId}`);
       router.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to save dependents");

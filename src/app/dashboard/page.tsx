@@ -158,7 +158,7 @@ export default async function DashboardPage() {
                           )}
                         </TableCell>
                         <TableCell className="hidden text-muted-foreground sm:table-cell">
-                          {String((sub.templates as { name: string }).name)}
+                          {String((sub.templates as Record<string, unknown>).name)}
                         </TableCell>
                         <TableCell>
                           <Badge

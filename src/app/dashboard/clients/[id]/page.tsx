@@ -27,8 +27,12 @@ import {
   Clock,
   Eye,
   Download,
+  ArrowRight,
 } from "lucide-react";
 import { SendFormSection } from "./send-form-section";
+import { EditClientModal } from "./edit-client-modal";
+import { EditPolicyModal } from "./edit-policy-modal";
+import { EditDependentsModal } from "./edit-dependents-modal";
 
 export default async function ClientDetailPage({
   params,
@@ -90,28 +94,57 @@ export default async function ClientDetailPage({
     .select("id, name, content")
     .eq("agent_id", user.id);
 
+  const hasPolicy = !!client.policies;
+  const wizardIncomplete = !hasPolicy;
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div className="flex items-center gap-3">
-        <Link href="/dashboard/clients">
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-navy sm:text-2xl">
-            {client.first_name} {client.last_name}
-          </h1>
-          <p className="text-sm text-muted-foreground">Client Profile</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <Link href="/dashboard/clients">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-navy sm:text-2xl">
+              {client.first_name} {client.last_name}
+            </h1>
+            <p className="text-sm text-muted-foreground">Client Profile</p>
+          </div>
         </div>
+
+        {wizardIncomplete && (
+          <Link href={`/dashboard/clients/new?resume=${id}`}>
+            <Button variant="navy" size="sm">
+              <ArrowRight className="mr-2 h-4 w-4" />
+              Continue Setup
+            </Button>
+          </Link>
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           {/* Contact Info */}
           <Card className="border-slate-200">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-lg">Contact Information</CardTitle>
+              <EditClientModal
+                clientId={id}
+                initialData={{
+                  first_name: String(client.first_name || ""),
+                  last_name: String(client.last_name || ""),
+                  email: String(client.email || ""),
+                  phone: client.phone ? String(client.phone) : "",
+                  ssn: client.ssn_encrypted ? String(client.ssn_encrypted) : "",
+                  address: String(client.address || ""),
+                  city: String(client.city || ""),
+                  state: String(client.state || ""),
+                  zip: String(client.zip || ""),
+                  date_of_birth: client.date_of_birth ? String(client.date_of_birth) : "",
+                }}
+              />
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <div className="flex items-center gap-2 text-sm">
@@ -139,8 +172,19 @@ export default async function ClientDetailPage({
 
           {/* Policy */}
           <Card className="border-slate-200">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-lg">Policy Details</CardTitle>
+              <EditPolicyModal
+                clientId={id}
+                initialData={client.policies ? {
+                  id: String(client.policies.id),
+                  carrier: String(client.policies.carrier),
+                  plan: String(client.policies.plan || ""),
+                  policy_number: String(client.policies.policy_number),
+                  premium: Number(client.policies.premium) || 0,
+                  effective_date: client.policies.effective_date ? String(client.policies.effective_date) : "",
+                } : null}
+              />
             </CardHeader>
             <CardContent>
               {client.policies ? (
@@ -151,7 +195,7 @@ export default async function ClientDetailPage({
                   </div>
                   <div>
                     <p className="text-xs font-medium text-muted-foreground">Plan</p>
-                    <p className="text-sm font-medium">{client.policies.plan}</p>
+                    <p className="text-sm font-medium">{client.policies.plan || "—"}</p>
                   </div>
                   <div>
                     <p className="text-xs font-medium text-muted-foreground">Policy #</p>
@@ -163,22 +207,39 @@ export default async function ClientDetailPage({
                   </div>
                   <div>
                     <p className="text-xs font-medium text-muted-foreground">Effective</p>
-                    <p className="text-sm font-medium">{client.policies.effective_date}</p>
+                    <p className="text-sm font-medium">{client.policies.effective_date || "—"}</p>
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No policy assigned</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">No policy assigned</p>
+                </div>
               )}
             </CardContent>
           </Card>
 
           {/* Dependents */}
-          {dependents && dependents.length > 0 && (
-            <Card className="border-slate-200">
-              <CardHeader>
-                <CardTitle className="text-lg">Dependents ({dependents.length})</CardTitle>
-              </CardHeader>
-              <CardContent>
+          <Card className="border-slate-200">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-lg">
+                Dependents {dependents ? `(${dependents.length})` : ""}
+              </CardTitle>
+              {hasPolicy && (
+                <EditDependentsModal
+                  clientId={id}
+                  policyId={String(client.policies!.id)}
+                  initialData={(dependents || []).map((d) => ({
+                    id: String(d.id),
+                    first_name: String(d.first_name),
+                    last_name: String(d.last_name),
+                    applies_to_policy: Boolean(d.applies_to_policy),
+                    date_of_birth: d.date_of_birth ? String(d.date_of_birth) : "",
+                  }))}
+                />
+              )}
+            </CardHeader>
+            <CardContent>
+              {dependents && dependents.length > 0 ? (
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
@@ -189,8 +250,8 @@ export default async function ClientDetailPage({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {dependents.map((dep: Record<string, unknown>) => (
-                        <TableRow key={dep.id as string}>
+                      {dependents.map((dep) => (
+                        <TableRow key={String(dep.id)}>
                           <TableCell className="font-medium">
                             {String(dep.first_name)} {String(dep.last_name)}
                           </TableCell>
@@ -201,11 +262,13 @@ export default async function ClientDetailPage({
                     </TableBody>
                   </Table>
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              ) : (
+                <p className="text-sm text-muted-foreground">No dependents added</p>
+              )}
+            </CardContent>
+          </Card>
 
-          {/* Document History */}
+          {/* Document History (mobile) */}
           <Card className="border-slate-200 lg:hidden">
             <CardHeader>
               <CardTitle className="text-lg">Document History</CardTitle>
@@ -214,23 +277,19 @@ export default async function ClientDetailPage({
               {submissions && submissions.length > 0 ? (
                 <ScrollArea className="h-[300px]">
                   <div className="space-y-4">
-                    {submissions.map((sub: Record<string, unknown>) => (
-                      <div key={sub.id as string} className="rounded-xl border border-slate-100 p-3">
+                    {submissions.map((sub) => (
+                      <div key={String(sub.id)} className="rounded-xl border border-slate-100 p-3">
                         <div className="flex items-start justify-between">
                           <div>
                             <p className="text-sm font-medium">
-                              {String((sub.templates as { name: string }).name)}
+                              {String((sub.templates as unknown as { name: string }).name)}
                             </p>
                             <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                               <Clock className="h-3 w-3" />
                               {new Date(String(sub.created_at)).toLocaleDateString()}
                             </div>
                           </div>
-                          <Badge
-                            variant={statusBadgeVariant(
-                              sub.status as "draft" | "sent" | "opened" | "signed"
-                            )}
-                          >
+                          <Badge variant={statusBadgeVariant(sub.status as "draft" | "sent" | "opened" | "signed")}>
                             {String(sub.status)}
                           </Badge>
                         </div>
@@ -284,23 +343,19 @@ export default async function ClientDetailPage({
               {submissions && submissions.length > 0 ? (
                 <ScrollArea className="h-[300px]">
                   <div className="space-y-4">
-                    {submissions.map((sub: Record<string, unknown>) => (
-                      <div key={sub.id as string} className="rounded-xl border border-slate-100 p-3">
+                    {submissions.map((sub) => (
+                      <div key={String(sub.id)} className="rounded-xl border border-slate-100 p-3">
                         <div className="flex items-start justify-between">
                           <div>
                             <p className="text-sm font-medium">
-                              {String((sub.templates as { name: string }).name)}
+                              {String((sub.templates as unknown as { name: string }).name)}
                             </p>
                             <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                               <Clock className="h-3 w-3" />
                               {new Date(String(sub.created_at)).toLocaleDateString()}
                             </div>
                           </div>
-                          <Badge
-                            variant={statusBadgeVariant(
-                              sub.status as "draft" | "sent" | "opened" | "signed"
-                            )}
-                          >
+                          <Badge variant={statusBadgeVariant(sub.status as "draft" | "sent" | "opened" | "signed")}>
                             {String(sub.status)}
                           </Badge>
                         </div>
