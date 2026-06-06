@@ -71,8 +71,11 @@ Signed on: ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString
       );
     }
 
+    const browserlessUrl =
+      process.env.BROWSERLESS_URL ?? "https://chrome.browserless.io/pdf";
+
     const browserlessRes = await fetch(
-      `https://chrome.browserless.io/pdf?token=${token}`,
+      `${browserlessUrl}?token=${token}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
