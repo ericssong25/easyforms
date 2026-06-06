@@ -97,29 +97,6 @@ interface EditClientModalProps {
   };
 }
 
-function formatPhone(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 10);
-  if (digits.length <= 3) return digits;
-  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
-  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-}
-
-interface EditClientModalProps {
-  clientId: string;
-  initialData: {
-    first_name: string;
-    last_name: string;
-    email: string;
-    phone: string;
-    ssn: string;
-    address: string;
-    city: string;
-    state: string;
-    zip: string;
-    date_of_birth: string;
-  };
-}
-
 export function EditClientModal({ clientId, initialData }: EditClientModalProps) {
   const router = useRouter();
   const supabase = createClient();

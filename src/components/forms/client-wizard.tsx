@@ -271,7 +271,10 @@ export function ClientWizard({ resumeClientId }: { resumeClientId?: string }) {
     setTouched((prev) => new Set(prev).add(field));
   };
 
-  const updateClient = (field: keyof ClientForm, value: string | boolean) => {
+  const updateClient = (
+    field: keyof ClientForm,
+    value: string | boolean | number | null
+  ) => {
     setClientForm((prev) => ({ ...prev, [field]: value }));
     markTouched(field);
     validateClientField(field, value);
@@ -282,7 +285,10 @@ export function ClientWizard({ resumeClientId }: { resumeClientId?: string }) {
     markTouched(field);
   };
 
-  const validateClientField = (field: keyof ClientForm, value?: string | boolean) => {
+  const validateClientField = (
+    field: keyof ClientForm,
+    value?: string | boolean | number | null
+  ) => {
     const v = value !== undefined ? value : clientForm[field];
     const newErrors = { ...errors };
 
