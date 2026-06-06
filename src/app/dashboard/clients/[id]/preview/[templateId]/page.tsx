@@ -37,7 +37,8 @@ export default async function PreviewBeforeSendPage({
         policy_number,
         premium,
         effective_date
-      )
+      ),
+      dependents (*)
     `
     )
     .eq("id", clientId)
@@ -64,6 +65,14 @@ export default async function PreviewBeforeSendPage({
   const renderContent = () => {
     let html = String(template.content);
     const policy = client.policies as Record<string, unknown> | null;
+    const dependents = (client.dependents || []) as Record<string, unknown>[];
+
+    const clientApplies = Boolean(client.applies_to_policy);
+    const coveredDependents = dependents.filter((d) =>
+      Boolean(d.applies_to_policy)
+    ).length;
+    const coverageCount = (clientApplies ? 1 : 0) + coveredDependents;
+    const today = new Date().toLocaleDateString("en-US");
 
     const vars: Record<string, string> = {
       first_name: String(client.first_name),
@@ -75,6 +84,17 @@ export default async function PreviewBeforeSendPage({
       state: String(client.state || ""),
       zip: String(client.zip || ""),
       date_of_birth: String(client.date_of_birth || ""),
+      subscriber_number: String(client.subscriber_number || ""),
+      tax_filing_status: String(client.tax_filing_status || ""),
+      marital_status: String(client.marital_status || ""),
+      projected_annual_income: client.holder_income
+        ? `$${Number(client.holder_income).toLocaleString("en-US")}`
+        : "",
+      tax_dependents_count:
+        client.tax_dependents_count != null
+          ? String(client.tax_dependents_count)
+          : "",
+      coverage_count: String(coverageCount),
       policy_number: String(policy?.policy_number || "N/A"),
       carrier: String(policy?.carrier || "N/A"),
       plan: String(policy?.plan || "N/A"),
@@ -82,6 +102,8 @@ export default async function PreviewBeforeSendPage({
       effective_date: String(policy?.effective_date || "N/A"),
       agency_name: String(agent?.agency_name || "Your Agency"),
       npn: String(agent?.npn || "N/A"),
+      agent_name: String(agent?.full_name || ""),
+      today_date: today,
     };
 
     for (const [key, value] of Object.entries(vars)) {

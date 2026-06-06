@@ -47,11 +47,54 @@ const STATE_OPTIONS = [
   { label: "District of Columbia", value: "DC" },
 ];
 
+const TAX_FILING_STATUS_OPTIONS = [
+  { label: "Single (Soltero)", value: "Single" },
+  { label: "Married Filing Jointly", value: "Married Filing Jointly" },
+  { label: "Married Filing Separately", value: "Married Filing Separately" },
+  { label: "Head of Household", value: "Head of Household" },
+];
+
+const MARITAL_STATUS_OPTIONS = [
+  { label: "Single (Soltero)", value: "Single" },
+  { label: "Married (Casado)", value: "Married" },
+  { label: "Divorced (Divorciado)", value: "Divorced" },
+  { label: "Widowed (Viudo)", value: "Widowed" },
+];
+
 function formatSsn(value: string): string {
   const digits = value.replace(/\D/g, "").slice(0, 9);
   if (digits.length <= 3) return digits;
   if (digits.length <= 5) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
   return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+}
+
+function formatPhone(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 10);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6)
+    return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+interface EditClientModalProps {
+  clientId: string;
+  initialData: {
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone: string;
+    ssn: string;
+    address: string;
+    city: string;
+    state: string;
+    zip: string;
+    date_of_birth: string;
+    subscriber_number: string;
+    holder_income: number | null;
+    tax_filing_status: string;
+    marital_status: string;
+    tax_dependents_count: number | null;
+  };
 }
 
 function formatPhone(value: string): string {
@@ -108,6 +151,15 @@ export function EditClientModal({ clientId, initialData }: EditClientModalProps)
           state: form.state.trim().toUpperCase(),
           zip: form.zip.trim(),
           date_of_birth: form.date_of_birth || null,
+          subscriber_number: form.subscriber_number.trim() || null,
+          holder_income:
+            form.holder_income != null && form.holder_income !== 0
+              ? form.holder_income
+              : null,
+          tax_filing_status: form.tax_filing_status || null,
+          marital_status: form.marital_status || null,
+          tax_dependents_count:
+            form.tax_dependents_count != null ? form.tax_dependents_count : null,
         })
         .eq("id", clientId);
 
@@ -116,7 +168,9 @@ export function EditClientModal({ clientId, initialData }: EditClientModalProps)
       setOpen(false);
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to update");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update"
+      );
     } finally {
       setLoading(false);
     }
@@ -192,6 +246,79 @@ export function EditClientModal({ clientId, initialData }: EditClientModalProps)
           <div className="space-y-1.5">
             <Label>Date of Birth</Label>
             <DateInput value={form.date_of_birth} onChange={(v) => update("date_of_birth", v)} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Número de suscriptor</Label>
+              <Input
+                value={form.subscriber_number}
+                onChange={(e) => update("subscriber_number", e.target.value)}
+                placeholder="SUB-12345"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Ingreso proyectado anual familiar ($)</Label>
+              <Input
+                type="number"
+                value={form.holder_income ?? ""}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    holder_income:
+                      e.target.value === "" ? null : parseFloat(e.target.value) || 0,
+                  }))
+                }
+                placeholder="20000"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Forma de declarar impuestos</Label>
+              <select
+                value={form.tax_filing_status}
+                onChange={(e) => update("tax_filing_status", e.target.value)}
+                className="flex h-9 w-full rounded-xl border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="">Select...</option>
+                {TAX_FILING_STATUS_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Estatus Marital</Label>
+              <select
+                value={form.marital_status}
+                onChange={(e) => update("marital_status", e.target.value)}
+                className="flex h-9 w-full rounded-xl border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="">Select...</option>
+                {MARITAL_STATUS_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Cantidad de personas en su declaración de impuestos 2025</Label>
+            <Input
+              type="number"
+              min={0}
+              value={form.tax_dependents_count ?? ""}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  tax_dependents_count:
+                    e.target.value === "" ? null : parseInt(e.target.value, 10) || 0,
+                }))
+              }
+              placeholder="0"
+            />
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>

@@ -17,7 +17,12 @@ export default async function PreviewSignPage({
     .select(
       `
       *,
-      clients!inner(*, policies!clients_policy_id_fkey(*)),
+      clients!inner(
+        *,
+        policies!clients_policy_id_fkey(*),
+        dependents(*)
+      ),
+      agents!form_submissions_agent_id_fkey(*),
       templates!inner(name, content)
     `
     )

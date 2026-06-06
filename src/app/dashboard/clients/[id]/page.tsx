@@ -28,6 +28,7 @@ import {
   Eye,
   Download,
   ArrowRight,
+  BadgeCheck,
 } from "lucide-react";
 import { SendFormSection } from "./send-form-section";
 import { EditClientModal } from "./edit-client-modal";
@@ -60,7 +61,8 @@ export default async function ClientDetailPage({
         policy_number,
         premium,
         effective_date
-      )
+      ),
+      dependents (*)
     `
     )
     .eq("id", id)
@@ -143,6 +145,23 @@ export default async function ClientDetailPage({
                   state: String(client.state || ""),
                   zip: String(client.zip || ""),
                   date_of_birth: client.date_of_birth ? String(client.date_of_birth) : "",
+                  subscriber_number: client.subscriber_number
+                    ? String(client.subscriber_number)
+                    : "",
+                  holder_income:
+                    client.holder_income != null
+                      ? Number(client.holder_income)
+                      : null,
+                  tax_filing_status: client.tax_filing_status
+                    ? String(client.tax_filing_status)
+                    : "",
+                  marital_status: client.marital_status
+                    ? String(client.marital_status)
+                    : "",
+                  tax_dependents_count:
+                    client.tax_dependents_count != null
+                      ? Number(client.tax_dependents_count)
+                      : null,
                 }}
               />
             </CardHeader>
@@ -166,6 +185,38 @@ export default async function ClientDetailPage({
               <div className="flex items-center gap-2 text-sm">
                 <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <span>DOB: {client.date_of_birth || "N/A"}</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <BadgeCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span>
+                  Subscriber #: {client.subscriber_number || "N/A"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <BadgeCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span>
+                  Annual income:{" "}
+                  {client.holder_income != null
+                    ? `$${Number(client.holder_income).toLocaleString("en-US")}`
+                    : "N/A"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <BadgeCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span>Tax filing: {client.tax_filing_status || "N/A"}</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <BadgeCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span>Marital status: {client.marital_status || "N/A"}</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <BadgeCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span>
+                  Tax dependents:{" "}
+                  {client.tax_dependents_count != null
+                    ? client.tax_dependents_count
+                    : "N/A"}
+                </span>
               </div>
             </CardContent>
           </Card>

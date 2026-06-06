@@ -46,6 +46,8 @@ export function PreviewAndSign({ submission }: PreviewAndSignProps) {
   const template = submission.templates as { name: string; content: string };
   const rawClient = (submission.clients || {}) as Record<string, unknown>;
   const rawPolicy = rawClient?.policies as Record<string, unknown> | null;
+  const rawDependents = (rawClient?.dependents || []) as Record<string, unknown>[];
+  const rawAgent = (submission.agents || {}) as Record<string, unknown>;
 
   const verificationData = (submission.verification_data || {}) as {
     ssn_last4?: string;
@@ -114,6 +116,13 @@ export function PreviewAndSign({ submission }: PreviewAndSignProps) {
   const renderContent = useCallback(() => {
     let html = template.content || "";
 
+    const clientApplies = Boolean(rawClient.applies_to_policy);
+    const coveredDependents = rawDependents.filter((d) =>
+      Boolean(d.applies_to_policy)
+    ).length;
+    const coverageCount = (clientApplies ? 1 : 0) + coveredDependents;
+    const today = new Date().toLocaleDateString("en-US");
+
     const vars: Record<string, string> = {
       first_name: String(rawClient.first_name || ""),
       last_name: String(rawClient.last_name || ""),
@@ -124,13 +133,27 @@ export function PreviewAndSign({ submission }: PreviewAndSignProps) {
       state: String(rawClient.state || ""),
       zip: String(rawClient.zip || ""),
       date_of_birth: String(rawClient.date_of_birth || ""),
+      subscriber_number: String(rawClient.subscriber_number || ""),
+      tax_filing_status: String(rawClient.tax_filing_status || ""),
+      marital_status: String(rawClient.marital_status || ""),
+      projected_annual_income: rawClient.holder_income
+        ? `$${Number(rawClient.holder_income).toLocaleString("en-US")}`
+        : "",
+      tax_dependents_count: rawClient.tax_dependents_count != null
+        ? String(rawClient.tax_dependents_count)
+        : "",
+      coverage_count: String(coverageCount),
       policy_number: String(rawPolicy?.policy_number || "N/A"),
       carrier: String(rawPolicy?.carrier || "N/A"),
       plan: String(rawPolicy?.plan || "N/A"),
-      premium: rawPolicy?.premium ? `$${Number(rawPolicy.premium).toFixed(2)}/mo` : "N/A",
+      premium: rawPolicy?.premium
+        ? `$${Number(rawPolicy.premium).toFixed(2)}/mo`
+        : "N/A",
       effective_date: String(rawPolicy?.effective_date || "N/A"),
-      agency_name: "Your Agent",
-      npn: "N/A",
+      agency_name: String(rawAgent.agency_name || "Your Agency"),
+      npn: String(rawAgent.npn || "N/A"),
+      agent_name: String(rawAgent.full_name || ""),
+      today_date: today,
     };
 
     for (const [key, value] of Object.entries(vars)) {

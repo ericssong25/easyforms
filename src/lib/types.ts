@@ -24,6 +24,11 @@ export interface Client {
   state: string;
   zip: string;
   date_of_birth: string;
+  subscriber_number: string | null;
+  holder_income: number | null;
+  tax_filing_status: string | null;
+  marital_status: string | null;
+  tax_dependents_count: number | null;
   created_at: string;
 }
 
@@ -85,6 +90,11 @@ export interface ClientFormData {
   state: string;
   zip: string;
   date_of_birth: string;
+  subscriber_number: string;
+  holder_income: number | null;
+  tax_filing_status: string;
+  marital_status: string;
+  tax_dependents_count: number | null;
 }
 
 export interface PolicyFormData {

@@ -21,23 +21,49 @@ import {
 import { toast } from "sonner";
 import { Eye, Save, ArrowLeft, Code2, Variable, Monitor } from "lucide-react";
 
-const AVAILABLE_VARIABLES = [
-  { label: "First Name", token: "{first_name}" },
-  { label: "Last Name", token: "{last_name}" },
-  { label: "Email", token: "{email}" },
-  { label: "Phone", token: "{phone}" },
-  { label: "Address", token: "{address}" },
-  { label: "City", token: "{city}" },
-  { label: "State", token: "{state}" },
-  { label: "ZIP Code", token: "{zip}" },
-  { label: "Date of Birth", token: "{date_of_birth}" },
-  { label: "Policy Number", token: "{policy_number}" },
-  { label: "Carrier", token: "{carrier}" },
-  { label: "Plan", token: "{plan}" },
-  { label: "Premium", token: "{premium}" },
-  { label: "Effective Date", token: "{effective_date}" },
-  { label: "Agency Name", token: "{agency_name}" },
-  { label: "Agent NPN", token: "{npn}" },
+const VARIABLE_SECTIONS: { title: string; variables: { label: string; token: string }[] }[] = [
+  {
+    title: "Client Fields",
+    variables: [
+      { label: "First Name", token: "{first_name}" },
+      { label: "Last Name", token: "{last_name}" },
+      { label: "Email", token: "{email}" },
+      { label: "Phone", token: "{phone}" },
+      { label: "Address", token: "{address}" },
+      { label: "City", token: "{city}" },
+      { label: "State", token: "{state}" },
+      { label: "ZIP Code", token: "{zip}" },
+      { label: "Date of Birth", token: "{date_of_birth}" },
+      { label: "Subscriber Number", token: "{subscriber_number}" },
+      { label: "Tax Filing Status", token: "{tax_filing_status}" },
+      { label: "Marital Status", token: "{marital_status}" },
+      { label: "Projected Annual Income", token: "{projected_annual_income}" },
+      { label: "Tax Dependents Count", token: "{tax_dependents_count}" },
+      { label: "Coverage Count", token: "{coverage_count}" },
+    ],
+  },
+  {
+    title: "Policy Fields",
+    variables: [
+      { label: "Policy Number", token: "{policy_number}" },
+      { label: "Carrier", token: "{carrier}" },
+      { label: "Plan", token: "{plan}" },
+      { label: "Premium", token: "{premium}" },
+      { label: "Effective Date", token: "{effective_date}" },
+    ],
+  },
+  {
+    title: "Agency Fields",
+    variables: [
+      { label: "Agency Name", token: "{agency_name}" },
+      { label: "Agent NPN", token: "{npn}" },
+      { label: "Agent Name", token: "{agent_name}" },
+    ],
+  },
+  {
+    title: "Form Fields",
+    variables: [{ label: "Today's Date", token: "{today_date}" }],
+  },
 ];
 
 interface FormBuilderProps {
@@ -88,6 +114,7 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
   };
 
   const renderPreview = () => {
+    const today = new Date().toLocaleDateString("en-US");
     return content.replace(/\{(\w+)\}/g, (_match: string, key: string) => {
       const varMap: Record<string, string> = {
         first_name: "John",
@@ -99,6 +126,12 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
         state: "NY",
         zip: "10001",
         date_of_birth: "01/15/1985",
+        subscriber_number: "SUB-987654",
+        tax_filing_status: "Single",
+        marital_status: "Single",
+        projected_annual_income: "$20,000",
+        tax_dependents_count: "3",
+        coverage_count: "3",
         policy_number: "POL-12345",
         carrier: "Blue Cross",
         plan: "Gold PPO",
@@ -106,6 +139,8 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
         effective_date: "01/01/2025",
         agency_name: "ABC Insurance",
         npn: "12345678",
+        agent_name: "Jane Agent",
+        today_date: today,
       };
       return varMap[key] ?? `[${key}]`;
     });
@@ -163,44 +198,22 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
 
   const VariablesPanel = () => (
     <div className="grid gap-1">
-      <p className="mb-2 text-xs font-medium text-muted-foreground">
-        Client Fields
-      </p>
-      {AVAILABLE_VARIABLES.slice(0, 10).map((v) => (
-        <button
-          key={v.token}
-          onClick={() => insertVariable(v.token)}
-          className="flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-slate-blue/5"
-        >
-          <span>{v.label}</span>
-          <code className="text-xs text-slate-blue">{v.token}</code>
-        </button>
-      ))}
-      <p className="mb-2 mt-4 text-xs font-medium text-muted-foreground">
-        Policy Fields
-      </p>
-      {AVAILABLE_VARIABLES.slice(10, 14).map((v) => (
-        <button
-          key={v.token}
-          onClick={() => insertVariable(v.token)}
-          className="flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-slate-blue/5"
-        >
-          <span>{v.label}</span>
-          <code className="text-xs text-slate-blue">{v.token}</code>
-        </button>
-      ))}
-      <p className="mb-2 mt-4 text-xs font-medium text-muted-foreground">
-        Agency Fields
-      </p>
-      {AVAILABLE_VARIABLES.slice(14).map((v) => (
-        <button
-          key={v.token}
-          onClick={() => insertVariable(v.token)}
-          className="flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-slate-blue/5"
-        >
-          <span>{v.label}</span>
-          <code className="text-xs text-slate-blue">{v.token}</code>
-        </button>
+      {VARIABLE_SECTIONS.map((section) => (
+        <div key={section.title}>
+          <p className="mb-2 mt-2 text-xs font-medium text-muted-foreground first:mt-0">
+            {section.title}
+          </p>
+          {section.variables.map((v) => (
+            <button
+              key={v.token}
+              onClick={() => insertVariable(v.token)}
+              className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-slate-blue/5"
+            >
+              <span>{v.label}</span>
+              <code className="text-xs text-slate-blue">{v.token}</code>
+            </button>
+          ))}
+        </div>
       ))}
     </div>
   );

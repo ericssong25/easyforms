@@ -57,6 +57,11 @@ interface ClientForm {
   state: string;
   zip: string;
   date_of_birth: string;
+  subscriber_number: string;
+  holder_income: number | null;
+  tax_filing_status: string;
+  marital_status: string;
+  tax_dependents_count: number | null;
 }
 
 interface PolicyForm {
@@ -102,6 +107,20 @@ const STATE_OPTIONS: { label: string; value: string }[] = [
   { label: "Washington", value: "WA" }, { label: "West Virginia", value: "WV" },
   { label: "Wisconsin", value: "WI" }, { label: "Wyoming", value: "WY" },
   { label: "District of Columbia", value: "DC" },
+];
+
+const TAX_FILING_STATUS_OPTIONS = [
+  { label: "Single (Soltero)", value: "Single" },
+  { label: "Married Filing Jointly (Casado, declarando juntos)", value: "Married Filing Jointly" },
+  { label: "Married Filing Separately (Casado, declarando por separado)", value: "Married Filing Separately" },
+  { label: "Head of Household (Cabeza de familia)", value: "Head of Household" },
+];
+
+const MARITAL_STATUS_OPTIONS = [
+  { label: "Single (Soltero)", value: "Single" },
+  { label: "Married (Casado)", value: "Married" },
+  { label: "Divorced (Divorciado)", value: "Divorced" },
+  { label: "Widowed (Viudo)", value: "Widowed" },
 ];
 
 const steps = [
@@ -178,6 +197,11 @@ export function ClientWizard({ resumeClientId }: { resumeClientId?: string }) {
     state: "",
     zip: "",
     date_of_birth: "",
+    subscriber_number: "",
+    holder_income: null,
+    tax_filing_status: "",
+    marital_status: "",
+    tax_dependents_count: null,
   });
 
   const [policyForm, setPolicyForm] = useState<PolicyForm>({
@@ -216,6 +240,13 @@ export function ClientWizard({ resumeClientId }: { resumeClientId?: string }) {
         state: c.state || "",
         zip: c.zip || "",
         date_of_birth: c.date_of_birth ? String(c.date_of_birth) : "",
+        subscriber_number: c.subscriber_number ? String(c.subscriber_number) : "",
+        holder_income:
+          c.holder_income != null ? Number(c.holder_income) : null,
+        tax_filing_status: c.tax_filing_status || "",
+        marital_status: c.marital_status || "",
+        tax_dependents_count:
+          c.tax_dependents_count != null ? Number(c.tax_dependents_count) : null,
       });
 
       if (c.policies) {
@@ -369,6 +400,17 @@ export function ClientWizard({ resumeClientId }: { resumeClientId?: string }) {
           state: clientForm.state.trim().toUpperCase(),
           zip: clientForm.zip.trim(),
           date_of_birth: clientForm.date_of_birth || null,
+          subscriber_number: clientForm.subscriber_number.trim() || null,
+          holder_income:
+            clientForm.holder_income != null && clientForm.holder_income !== 0
+              ? clientForm.holder_income
+              : null,
+          tax_filing_status: clientForm.tax_filing_status || null,
+          marital_status: clientForm.marital_status || null,
+          tax_dependents_count:
+            clientForm.tax_dependents_count != null
+              ? clientForm.tax_dependents_count
+              : null,
         })
         .select()
         .single();
@@ -719,6 +761,98 @@ export function ClientWizard({ resumeClientId }: { resumeClientId?: string }) {
               <Label htmlFor="applies_to_policy" className="cursor-pointer">
                 This client is the policyholder
               </Label>
+            </div>
+
+            {/* Subscriber Number + Annual Income */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="subscriber_number">Número de suscriptor</Label>
+                <Input
+                  id="subscriber_number"
+                  value={clientForm.subscriber_number}
+                  onChange={(e) => updateClient("subscriber_number", e.target.value)}
+                  placeholder="SUB-12345"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="holder_income">
+                  Ingreso proyectado anual familiar ($)
+                </Label>
+                <Input
+                  id="holder_income"
+                  type="number"
+                  value={clientForm.holder_income ?? ""}
+                  onChange={(e) =>
+                    updateClient(
+                      "holder_income",
+                      e.target.value === "" ? null : parseFloat(e.target.value) || 0
+                    )
+                  }
+                  placeholder="20000"
+                />
+              </div>
+            </div>
+
+            {/* Tax Filing + Marital Status */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="tax_filing_status">
+                  Forma de declarar impuestos
+                </Label>
+                <select
+                  id="tax_filing_status"
+                  value={clientForm.tax_filing_status}
+                  onChange={(e) => updateClient("tax_filing_status", e.target.value)}
+                  className="flex h-9 w-full rounded-xl border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="">Select...</option>
+                  {TAX_FILING_STATUS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="marital_status">Estatus Marital</Label>
+                <select
+                  id="marital_status"
+                  value={clientForm.marital_status}
+                  onChange={(e) => updateClient("marital_status", e.target.value)}
+                  className="flex h-9 w-full rounded-xl border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="">Select...</option>
+                  {MARITAL_STATUS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Tax Dependents Count */}
+            <div className="space-y-1.5">
+              <Label htmlFor="tax_dependents_count">
+                Cantidad de personas en su declaración de impuestos 2025
+              </Label>
+              <Input
+                id="tax_dependents_count"
+                type="number"
+                min={0}
+                value={clientForm.tax_dependents_count ?? ""}
+                onChange={(e) =>
+                  updateClient(
+                    "tax_dependents_count",
+                    e.target.value === "" ? null : parseInt(e.target.value, 10) || 0
+                  )
+                }
+                placeholder="0"
+              />
+              <p className="text-xs text-muted-foreground">
+                Se usa en consentimientos del Mercado. La cantidad de personas con
+                cobertura se calcula automáticamente desde los dependientes.
+              </p>
             </div>
 
             <div className="flex justify-end">
