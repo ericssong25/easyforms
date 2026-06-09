@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/card";
 import Link from "next/link";
 import { ArrowLeft, FileText, UserRound, Shield } from "lucide-react";
+import { DocumentSheet } from "@/components/document/document-sheet";
+import { normalizeLogo } from "@/lib/document-logo";
 import { SendActions } from "./send-actions";
 
 export default async function PreviewBeforeSendPage({
@@ -55,6 +57,8 @@ export default async function PreviewBeforeSendPage({
     .single();
 
   if (!template) redirect("/dashboard/clients");
+
+  const templateLogo = normalizeLogo((template as { logo?: unknown }).logo);
 
   const { data: agent } = await supabase
     .from("agents")
@@ -145,10 +149,13 @@ export default async function PreviewBeforeSendPage({
               </div>
             </CardHeader>
             <CardContent>
-              <div className="max-w-[210mm] mx-auto overflow-y-auto overflow-x-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-inner sm:p-6">
-                <div
-                  className="prose prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{ __html: renderContent() }}
+              <div className="rounded-xl border border-slate-200 bg-slate-100 p-4">
+                <DocumentSheet
+                  html={renderContent()}
+                  logo={templateLogo}
+                  showSignatureZone
+                  signatureLabel="Signature"
+                  signatureMeta="Signature is added when the document is signed"
                 />
               </div>
             </CardContent>

@@ -1,8 +1,32 @@
 import { NextResponse } from "next/server";
+import {
+  PAGE_PX,
+  MARGINS_IN,
+  CONTENT_WIDTH,
+  SIGNATURE_ZONE_PX,
+} from "@/lib/document-format";
+import { documentCssWithFonts } from "@/lib/document-styles";
+import { hasLogo, normalizeLogo } from "@/lib/document-logo";
+import { getDmSansWoff2Base64 } from "@/lib/document-fonts.server";
+
+export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
-    const { html, signature } = await request.json();
+    // Parse the body defensively. request.json() throws on non-JSON,
+    // which previously surfaced as Next's HTML 500 page.
+    let body: { html?: string; signature?: string; logo?: unknown };
+    try {
+      body = (await request.json()) as typeof body;
+    } catch (parseErr) {
+      console.error("[generate-pdf] invalid JSON body:", parseErr);
+      return NextResponse.json(
+        { error: "Invalid JSON body" },
+        { status: 400 }
+      );
+    }
+    const { html, signature } = body;
+    const logo = normalizeLogo(body.logo);
 
     if (!html) {
       return NextResponse.json(
@@ -11,51 +35,83 @@ export async function POST(request: Request) {
       );
     }
 
+    const dmSansBase64 = await getDmSansWoff2Base64();
+    const css = documentCssWithFonts(dmSansBase64 ?? undefined);
+
+    const logoHtml = hasLogo(logo)
+      ? `<div class="ef-logo" data-pos="${logo.position}" style="--ef-logo-w:${logo.size}px; --ef-logo-max-w:${Math.min(logo.size, 240)}px;">
+           <img src="${logo.dataUrl}" alt="Document logo" />
+         </div>`
+      : "";
+
+    // Note: the page container is given a fixed pixel height and
+    // `overflow: hidden`. This is intentional: even if the agent ignored the
+    // in-editor overflow warning, the PDF generator must still produce
+    // exactly one Letter-sized page. Content that doesn't fit is clipped.
+    //
+    // IMPORTANT: every CSS rule in document-styles.ts is scoped under
+    // .ef-document. The HTML therefore needs a `<div class="ef-document">`
+    // wrapper INSIDE .ef-page so that .ef-logo / .ef-document-content /
+    // .ef-signature-zone / h1 / h2 / p all match their styles. The
+    // .ef-document wrapper also acts as the position:relative ancestor
+    // for the absolutely-positioned logo (otherwise it would size itself
+    // to the viewport and overflow the sheet).
     const fullHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2/dist/tailwind.min.css" rel="stylesheet">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap');
+  @page { size: Letter; margin: 0; }
+  html, body { margin: 0; padding: 0; }
   body {
-    font-family: 'DM Sans', system-ui, sans-serif;
-    color: #1a3a5c;
     background: #ffffff;
-    margin: 0;
-    padding: 40px;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  .prose { max-width: none; color: #1a3a5c; }
-  .prose h1, .prose h2, .prose h3, .prose h4 { color: #1a3a5c; }
-  .prose-sm { font-size: 0.875rem; }
-  .prose ul { list-style-type: disc; padding-left: 1.625em; }
-  .prose ol { list-style-type: decimal; padding-left: 1.625em; }
-  .prose li { margin-top: 0.25em; margin-bottom: 0.25em; }
-  .prose img { max-width: 100%; height: auto; }
-  .leading-snug { line-height: 1.375; }
-  * { box-sizing: border-box; }
-  .signature-block { margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 20px; }
-  .signature-block img { max-width: 200px; height: auto; }
+  /* Page container = exactly one Letter sheet, no scrollbars, no second page. */
+  .ef-page {
+    position: relative;
+    width: ${PAGE_PX.width}px;
+    height: ${PAGE_PX.height}px;
+    overflow: hidden;
+    box-sizing: border-box;
+    background: #ffffff;
+  }
+  /* .ef-document fills .ef-page. position:relative is REQUIRED so the
+     .ef-logo (position:absolute) anchors to the sheet, not the viewport. */
+  .ef-page > .ef-document {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+    /* Page-level margin in CSS inches (matches the editor). */
+    padding: ${MARGINS_IN.top}in ${MARGINS_IN.right}in ${MARGINS_IN.bottom}in ${MARGINS_IN.left}in;
+  }
+  .ef-document-content {
+    position: relative;
+    z-index: 1;
+    width: ${CONTENT_WIDTH}px;
+  }
+  ${css}
 </style>
 </head>
 <body>
-<div class="prose prose-sm max-w-none leading-snug">
-${html}
+<div class="ef-page">
+  <div class="ef-document">
+    ${logoHtml}
+    <div class="ef-document-content">${html}</div>
+    <div class="ef-signature-zone" style="height:${SIGNATURE_ZONE_PX}px;">
+      ${
+        signature
+          ? `<img class="ef-signature-img" src="${signature}" alt="Signature" />
+             <div class="ef-signature-label">Signature</div>
+             <div class="ef-signature-meta">Signed on: ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</div>`
+          : `<div class="ef-signature-label">— Signature —</div>`
+      }
+    </div>
+  </div>
 </div>
-${
-  signature
-    ? `<div class="signature-block">
-<p style="font-weight: bold; font-size: 14px;">Signature:</p>
-<img src="${signature}" alt="Signature" />
-<p style="font-size: 12px; color: #64748b; margin-top: 10px;">
-Signed on: ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}
-</p>
-</div>`
-    : ""
-}
 </body>
 </html>`;
 
@@ -74,19 +130,19 @@ Signed on: ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString
     const browserlessUrl =
       process.env.BROWSERLESS_URL ?? "https://chrome.browserless.io/pdf";
 
-    const browserlessRes = await fetch(
-      `${browserlessUrl}?token=${token}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          html: fullHtml,
-          options: {
-            printBackground: true,
-          },
-        }),
-      }
-    );
+    const browserlessRes = await fetch(`${browserlessUrl}?token=${token}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        html: fullHtml,
+        options: {
+          format: "Letter",
+          printBackground: true,
+          preferCSSPageSize: true,
+          margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        },
+      }),
+    });
 
     if (!browserlessRes.ok) {
       const errText = await browserlessRes.text();

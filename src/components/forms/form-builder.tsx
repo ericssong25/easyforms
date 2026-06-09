@@ -18,6 +18,8 @@ import {
   RichTextEditor,
   type RichTextEditorHandle,
 } from "@/components/ui/rich-text-editor";
+import { DocumentSheet } from "@/components/document/document-sheet";
+import { DEFAULT_LOGO, normalizeLogo, type TemplateLogo } from "@/lib/document-logo";
 import { toast } from "sonner";
 import { Eye, Save, ArrowLeft, Code2, Variable, Monitor } from "lucide-react";
 
@@ -76,10 +78,12 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
   const editorRef = useRef<RichTextEditorHandle>(null);
   const [name, setName] = useState("");
   const [content, setContent] = useState("<p></p>");
+  const [logo, setLogo] = useState<TemplateLogo>(DEFAULT_LOGO);
   const [activeTab, setActiveTab] = useState("edit");
   const [saving, setSaving] = useState(false);
   const [loadingTemplate, setLoadingTemplate] = useState(false);
   const [showVarsMobile, setShowVarsMobile] = useState(false);
+  const [overflow, setOverflow] = useState(false);
 
   useEffect(() => {
     if (templateId) loadTemplate();
@@ -101,6 +105,7 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
       if (data) {
         setName(data.name);
         setContent(data.content || "<p></p>");
+        setLogo(normalizeLogo(data.logo));
       }
     } catch {
       toast.error("Failed to load template");
@@ -146,20 +151,22 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
     });
   };
 
-  const handleSave = async () => {
-    if (!name.trim() || !content.trim() || content === "<p></p>") {
-      toast.error("Please provide a name and content for the template");
-      return;
-    }
+  const performSave = async () => {
     setSaving(true);
     try {
       const { data: existingUser } = await supabase.auth.getUser();
       if (!existingUser.user) throw new Error("Not authenticated");
 
+      const payload = {
+        name: name.trim(),
+        content: content.trim(),
+        logo: logo && logo.dataUrl ? logo : null,
+      };
+
       if (templateId) {
         const { error } = await supabase
           .from("templates")
-          .update({ name: name.trim(), content: content.trim() })
+          .update(payload)
           .eq("id", templateId)
           .eq("agent_id", existingUser.user.id);
         if (error) throw error;
@@ -169,8 +176,7 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
           .from("templates")
           .insert({
             agent_id: existingUser.user.id,
-            name: name.trim(),
-            content: content.trim(),
+            ...payload,
           })
           .select()
           .single();
@@ -186,6 +192,20 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSave = async () => {
+    if (!name.trim() || !content.trim() || content === "<p></p>") {
+      toast.error("Please provide a name and content for the template");
+      return;
+    }
+    if (overflow) {
+      const ok = window.confirm(
+        "Content exceeds one page. Save anyway?"
+      );
+      if (!ok) return;
+    }
+    await performSave();
   };
 
   if (loadingTemplate) {
@@ -308,13 +328,19 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
                 ref={editorRef}
                 content={content}
                 onChange={setContent}
+                logo={logo}
+                onLogoChange={setLogo}
+                onOverflowChange={setOverflow}
               />
             </TabsContent>
             <TabsContent value="preview" className="mt-4">
-              <div className="max-w-[210mm] mx-auto overflow-y-auto overflow-x-hidden rounded-xl border border-slate-200 bg-white p-6 shadow-inner">
-                <div
-                  className="prose prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{ __html: renderPreview() }}
+              <div className="rounded-xl border border-slate-200 bg-slate-100 p-4">
+                <DocumentSheet
+                  html={renderPreview()}
+                  logo={logo}
+                  showSignatureZone
+                  signatureLabel="Signature"
+                  signatureMeta="Signature is added when the document is signed"
                 />
               </div>
             </TabsContent>

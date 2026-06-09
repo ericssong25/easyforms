@@ -1,27 +1,56 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getServiceRoleSupabase } from "@/lib/supabase/service";
 import { parseServerMetadata } from "@/lib/tracking";
+
+export const runtime = "nodejs";
+
+const UUID_LIKE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     const submissionId = formData.get("submissionId") as string | null;
-    const agentId = formData.get("agentId") as string | null;
     const signatureData = formData.get("signatureData") as string | null;
 
-    if (!file || !submissionId || !agentId) {
+    if (!file || !submissionId) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
       );
     }
+    if (!UUID_LIKE.test(submissionId)) {
+      return NextResponse.json(
+        { error: "submissionId must be a UUID" },
+        { status: 400 }
+      );
+    }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    );
+    const supabase = getServiceRoleSupabase();
+    if (!supabase) {
+      return NextResponse.json(
+        { error: "Server is not configured" },
+        { status: 500 }
+      );
+    }
+
+    // Resolve the agent id from the submission row server-side. The
+    // public signer does not (and should not) receive the agent id.
+    const { data: sub, error: subErr } = await supabase
+      .from("form_submissions")
+      .select("id, agent_id, status")
+      .eq("id", submissionId)
+      .single();
+
+    if (subErr || !sub) {
+      console.error("[upload-signed-pdf] submission lookup failed:", subErr);
+      return NextResponse.json(
+        { error: "Submission not found" },
+        { status: 404 }
+      );
+    }
+    const agentId = sub.agent_id as string;
 
     const filePath = `${agentId}/${submissionId}/signed.pdf`;
     const arrayBuffer = await file.arrayBuffer();
@@ -35,7 +64,7 @@ export async function POST(request: Request) {
       });
 
     if (uploadError) {
-      console.error("Storage upload error:", uploadError);
+      console.error("[upload-signed-pdf] storage upload error:", uploadError);
       return NextResponse.json(
         { error: uploadError.message },
         { status: 500 }
@@ -67,12 +96,14 @@ export async function POST(request: Request) {
     await supabase.from("tracking_events").insert({
       submission_id: submissionId,
       event_type: "signed",
-      ...meta,
+      ip_address: meta.ip_address,
+      user_agent: meta.user_agent,
+      device_type: meta.device_type,
     });
 
     return NextResponse.json({ url: pdfUrl });
   } catch (error) {
-    console.error("Upload API error:", error);
+    console.error("[upload-signed-pdf] error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Upload failed" },
       { status: 500 }

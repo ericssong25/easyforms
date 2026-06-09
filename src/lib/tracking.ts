@@ -1,27 +1,36 @@
 let cachedIp: string | null = null;
 
-async function getIp(): Promise<string> {
-  if (cachedIp) return cachedIp as string;
+async function getIp(): Promise<string | null> {
+  if (cachedIp !== null) return cachedIp;
   try {
     const res = await fetch("https://api.ipify.org?format=json");
     const data = await res.json();
     const raw = data.ip || "";
     cachedIp = cleanIp(raw);
-    return cachedIp as string;
+    return cachedIp;
   } catch {
-    return "unknown";
+    return null;
   }
 }
 
-function cleanIp(ip: string): string {
-  if (!ip || ip === "::1" || ip === "127.0.0.1" || ip === "localhost") {
-    return "localhost";
+/**
+ * Returns the IP as a string suitable for Postgres' `inet` type, or
+ * `null` when the input is empty / unparseable / loopback. Callers MUST
+ * pass `null` (not "localhost") to an `inet` column — Postgres rejects
+ * "localhost" with `22P02 invalid input syntax for type inet`.
+ */
+function cleanIp(ip: string): string | null {
+  if (!ip) return null;
+  const trimmed = ip.trim();
+  if (!trimmed) return null;
+  // "localhost" is not a valid IP literal and is rejected by `inet`.
+  if (trimmed.toLowerCase() === "localhost") return null;
+  // Strip a dual-stack prefix so we get a plain IPv4 address.
+  if (trimmed.startsWith("::ffff:")) {
+    const v4 = trimmed.replace("::ffff:", "");
+    return v4 || null;
   }
-  // Prefer IPv4 if dual-stack
-  if (ip.startsWith("::ffff:")) {
-    return ip.replace("::ffff:", "");
-  }
-  return ip;
+  return trimmed;
 }
 
 function parseBrowser(ua: string): string {
@@ -47,7 +56,9 @@ function parseDevice(ua: string): string {
 }
 
 export interface TrackingMetadata {
-  ip_address: string;
+  // null when the IP could not be resolved (loopback, empty, parse
+  // failure). Callers persist `null` directly into the `inet` column.
+  ip_address: string | null;
   user_agent: string;
   device_type: string;
 }
@@ -55,7 +66,7 @@ export interface TrackingMetadata {
 export function getTrackingMetadataClient(): TrackingMetadata {
   const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
   return {
-    ip_address: "loading", // populated after async fetch
+    ip_address: null, // populated after async fetch
     user_agent: parseBrowser(ua),
     device_type: parseDevice(ua),
   };

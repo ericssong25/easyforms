@@ -59,6 +59,11 @@ export interface Template {
   name: string;
   content: string;
   created_at: string;
+  logo?: {
+    dataUrl: string | null;
+    position: "left" | "right";
+    size: number;
+  } | null;
 }
 
 export interface FormSubmission {
