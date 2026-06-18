@@ -51,7 +51,7 @@ export function SendFormSection({
   };
 
   return (
-    <Card className="border-slate-200">
+    <Card className="border-border">
       <CardHeader>
         <CardTitle className="text-lg">Send Form</CardTitle>
         <CardDescription>

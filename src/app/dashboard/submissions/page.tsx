@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SubmissionsSearchWrapper } from "./submissions-search-wrapper";
+import { querySubmissionsAction } from "@/lib/actions/submissions";
+
+const PAGE_SIZE = 25;
 
 export default async function SubmissionsPage() {
   const supabase = await createClient();
@@ -10,31 +13,20 @@ export default async function SubmissionsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: submissions } = await supabase
-    .from("form_submissions")
-    .select(
-      `
-      *,
-      clients!inner(first_name, last_name, email),
-      templates!inner(name)
-    `
-    )
-    .eq("agent_id", user.id)
-    .order("created_at", { ascending: false });
+  // Initial server-side page: 25 most-recent submissions for this agent.
+  // The wrapper handles subsequent pages, search, and status filter.
+  const initial = await querySubmissionsAction({
+    from: 0,
+    to: PAGE_SIZE - 1,
+  });
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight text-navy sm:text-2xl">
-          Form Submissions
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Track all form submissions and their status
-        </p>
-      </div>
-
+    <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
       <SubmissionsSearchWrapper
-        submissions={(submissions ?? []) as Record<string, unknown>[]}
+        initialRows={initial.rows}
+        initialTotalCount={initial.totalCount}
+        initialHasMore={initial.hasMore}
+        initialStatusCounts={initial.statusCounts}
       />
     </div>
   );

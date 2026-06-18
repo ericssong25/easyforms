@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createFreshSignedUrl } from "@/lib/storage/signed-url";
 import {
   Card,
   CardContent,
@@ -88,6 +89,11 @@ export default async function SubmissionDetailPage({
   const client = submission.clients as { first_name: string; last_name: string; email: string; phone?: string };
   const template = submission.templates as { name: string; content: string };
 
+  const signedPdfPath =
+    (submission.signed_pdf_path as string | null) ??
+    (submission.signed_pdf_url as string | null);
+  const freshSignedPdfUrl = await createFreshSignedUrl(signedPdfPath);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -174,10 +180,10 @@ export default async function SubmissionDetailPage({
                 </div>
               </div>
 
-              {submission.signed_pdf_url && (
+              {freshSignedPdfUrl && (
                 <div className="mt-4 flex gap-2">
                   <Link
-                    href={String(submission.signed_pdf_url)}
+                    href={freshSignedPdfUrl}
                     target="_blank"
                   >
                     <Button variant="outline" size="sm">
@@ -185,7 +191,12 @@ export default async function SubmissionDetailPage({
                       View PDF
                     </Button>
                   </Link>
-                  <Link href={String(submission.signed_pdf_url)}>
+                  <Link
+                    href={freshSignedPdfUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download={`submission-${submission.id}.pdf`}
+                  >
                     <Button variant="navy" size="sm">
                       <Download className="mr-1 h-3 w-3" />
                       Download PDF

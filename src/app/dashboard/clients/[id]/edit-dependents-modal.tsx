@@ -129,7 +129,7 @@ export function EditDependentsModal({
             </p>
           ) : (
             dependents.map((dep, i) => (
-              <div key={dep.id} className="relative rounded-xl border border-slate-200 p-3">
+              <div key={dep.id} className="relative rounded-xl border border-border p-3">
                 <Button
                   variant="ghost"
                   size="icon"
@@ -138,7 +138,7 @@ export function EditDependentsModal({
                 >
                   <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
                 </Button>
-                <p className="mb-2 text-xs font-medium text-navy">Dependent {i + 1}</p>
+                <p className="mb-2 text-xs font-medium text-foreground">Dependent {i + 1}</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label>First Name</Label>

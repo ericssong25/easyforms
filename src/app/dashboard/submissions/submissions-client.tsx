@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,12 +36,12 @@ interface SubmissionsClientProps {
 }
 
 const eventIcons: Record<string, React.ReactNode> = {
-  created: <FileText className="h-4 w-4 text-slate-blue" />,
-  sent: <Send className="h-4 w-4 text-slate-500" />,
-  opened: <Eye className="h-4 w-4 text-amber-500" />,
-  verified: <Check className="h-4 w-4 text-slate-blue" />,
+  created: <FileText className="h-4 w-4 text-primary" />,
+  sent: <Send className="h-4 w-4 text-muted-foreground" />,
+  opened: <Eye className="h-4 w-4 text-amber-600" />,
+  verified: <Check className="h-4 w-4 text-primary" />,
   verification_failed: <Check className="h-4 w-4 rotate-45 text-destructive" />,
-  signed: <PenLine className="h-4 w-4 text-emerald" />,
+  signed: <PenLine className="h-4 w-4 text-emerald-600" />,
 };
 
 interface TrackEvent {
@@ -55,7 +56,9 @@ interface TrackEvent {
 export function SubmissionsClient({
   submissionId,
   signedPdfUrl,
-  clientEmail,
+  // clientEmail is reserved for the upcoming automated email send flow.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  clientEmail: _clientEmail,
 }: SubmissionsClientProps) {
   const supabase = createClient();
   const [copied, setCopied] = useState(false);
@@ -63,7 +66,10 @@ export function SubmissionsClient({
   const [events, setEvents] = useState<TrackEvent[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
 
-  const formLink = `${window.location.origin}/forms/${submissionId}`;
+  const formLink =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/forms/${submissionId}`
+      : `/forms/${submissionId}`;
 
   const copyLink = async () => {
     await navigator.clipboard.writeText(formLink);
@@ -71,8 +77,6 @@ export function SubmissionsClient({
     toast.success("Link copied to clipboard");
     setTimeout(() => setCopied(false), 2000);
   };
-
-  const emailLink = `mailto:${encodeURIComponent(clientEmail)}?subject=Please review and sign your document&body=Please review and sign your insurance document using the secure link below:%0D%0A%0D%0A${encodeURIComponent(formLink)}%0D%0A%0D%0AThank you!`;
 
   const loadTracking = async () => {
     setLoadingEvents(true);
@@ -96,11 +100,17 @@ export function SubmissionsClient({
   };
 
   return (
-    <div className="flex flex-wrap gap-1 justify-end">
+    <div className="flex flex-wrap items-center justify-end gap-0.5">
       {/* Copy Link */}
-      <Button variant="ghost" size="sm" onClick={copyLink} title="Copy client link">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={copyLink}
+        title="Copy client link"
+        aria-label="Copy client link"
+      >
         {copied ? (
-          <Check className="h-4 w-4 text-emerald" />
+          <Check className="h-4 w-4 text-emerald-600" />
         ) : (
           <Copy className="h-4 w-4" />
         )}
@@ -109,30 +119,51 @@ export function SubmissionsClient({
         </span>
       </Button>
 
-      {/* Email */}
-      <Button variant="ghost" size="sm" asChild title="Resend via email">
-        <a href={emailLink}>
-          <Mail className="h-4 w-4" />
-          <span className="hidden sm:ml-1 sm:inline">Email</span>
-        </a>
+      {/* Email — disabled (automated send not implemented) */}
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled
+        title="Coming soon — automated email sending is not implemented yet."
+        aria-label="Email — coming soon"
+      >
+        <Mail className="h-4 w-4" />
+        <span className="hidden sm:ml-1 sm:inline">Email</span>
       </Button>
 
-      {/* View PDF */}
+      {/* View — always navigates to the submission detail page */}
+      <Button
+        variant="ghost"
+        size="sm"
+        asChild
+        title="View submission details"
+        aria-label="View submission details"
+      >
+        <Link href={`/dashboard/submissions/${submissionId}`}>
+          <Eye className="h-4 w-4" />
+          <span className="hidden sm:ml-1 sm:inline">View</span>
+        </Link>
+      </Button>
+
+      {/* Download — only available when a signed PDF exists */}
       {signedPdfUrl && (
-        <>
-          <Button variant="ghost" size="sm" asChild title="View signed PDF">
-            <a href={signedPdfUrl} target="_blank">
-              <Eye className="h-4 w-4" />
-              <span className="hidden sm:ml-1 sm:inline">View</span>
-            </a>
-          </Button>
-          <Button variant="ghost" size="sm" asChild title="Download PDF">
-            <a href={signedPdfUrl}>
-              <Download className="h-4 w-4" />
-              <span className="hidden sm:ml-1 sm:inline">DL</span>
-            </a>
-          </Button>
-        </>
+        <Button
+          variant="ghost"
+          size="sm"
+          asChild
+          title="Download signed PDF"
+          aria-label="Download signed PDF"
+        >
+          <a
+            href={signedPdfUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            download={`submission-${submissionId}.pdf`}
+          >
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:ml-1 sm:inline">DL</span>
+          </a>
+        </Button>
       )}
 
       {/* Tracking History */}
@@ -143,6 +174,7 @@ export function SubmissionsClient({
             size="sm"
             onClick={() => loadTracking()}
             title="View tracking history"
+            aria-label="View tracking history"
           >
             <History className="h-4 w-4" />
             <span className="hidden sm:ml-1 sm:inline">Track</span>
@@ -150,8 +182,8 @@ export function SubmissionsClient({
         </DialogTrigger>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-navy">
-              <History className="h-4 w-4" />
+            <DialogTitle className="flex items-center gap-2 text-foreground">
+              <History className="h-4 w-4 text-primary" />
               Tracking History
             </DialogTitle>
             <DialogDescription>
@@ -170,17 +202,17 @@ export function SubmissionsClient({
               </p>
             ) : (
               <div className="relative space-y-0">
-                <div className="absolute left-[15px] top-2 bottom-2 w-px bg-slate-200" />
+                <div className="absolute left-[15px] top-2 bottom-2 w-px bg-border" />
                 {events.map((event) => (
                   <div key={event.id} className="relative pb-4">
                     <div className="flex gap-3">
-                      <div className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white">
+                      <div className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-card">
                         {eventIcons[event.event_type] || (
-                          <Clock className="h-4 w-4 text-slate-400" />
+                          <Clock className="h-4 w-4 text-muted-foreground/60" />
                         )}
                       </div>
                       <div className="min-w-0 flex-1 pt-1">
-                        <p className="text-sm font-medium capitalize">
+                        <p className="text-sm font-medium capitalize text-foreground">
                           {event.event_type.replace(/_/g, " ")}
                         </p>
                         <p className="text-xs text-muted-foreground">

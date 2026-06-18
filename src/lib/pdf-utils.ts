@@ -38,14 +38,3 @@ export function usePdfDownload() {
 
   return { downloadPdf, downloading };
 }
-
-export function generateSignedPdfUrl(
-  agentId: string,
-  submissionId: string
-): string {
-  const supabase = createClient();
-  const { data } = supabase.storage
-    .from("signed_forms")
-    .getPublicUrl(`${agentId}/${submissionId}/signed.pdf`);
-  return data.publicUrl;
-}

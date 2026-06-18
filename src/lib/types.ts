@@ -73,6 +73,7 @@ export interface FormSubmission {
   template_id: string;
   status: FormSubmissionStatus;
   signed_pdf_url: string | null;
+  signed_pdf_path: string | null;
   created_at: string;
 }
 
