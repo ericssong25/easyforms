@@ -22,7 +22,11 @@ function getServerPurifier() {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { JSDOM } = require("jsdom") as typeof import("jsdom");
   const dom = new JSDOM("<!DOCTYPE html>");
-  cached = createDOMPurify(dom.window);
+  // `dom.window` is jsdom's `DOMWindow`; cast through `unknown` because the
+  // project's `@types/trusted-types` ends up with two structurally
+  // incompatible copies in the pnpm tree (one from the top-level hoist,
+  // one from the .pnpm store), which makes a direct cast fail TypeScript.
+  cached = createDOMPurify(dom.window as unknown as Parameters<typeof createDOMPurify>[0]);
   return cached;
 }
 
