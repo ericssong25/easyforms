@@ -71,21 +71,28 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: urlData } = await supabase.storage
-      .from("signed_forms")
-      .getPublicUrl(filePath);
-
-    const pdfUrl = urlData.publicUrl;
-
-    await supabase
+    // Persist the STORAGE PATH, not a signed URL. Signed URLs expire via
+    // their embedded JWT "exp" claim, so persisting one is guaranteed to
+    // break eventually. Consumers call createSignedUrl fresh on each render.
+    // `signed_pdf_url` is retained for backward-compat and is now a no-op
+    // for working links; the source of truth is `signed_pdf_path`.
+    const { error: updateError } = await supabase
       .from("form_submissions")
       .update({
         status: "signed",
-        signed_pdf_url: pdfUrl,
+        signed_pdf_path: filePath,
         signature_data: signatureData,
         signed_at: new Date().toISOString(),
       })
       .eq("id", submissionId);
+
+    if (updateError) {
+      console.error("[upload-signed-pdf] row update error:", updateError);
+      return NextResponse.json(
+        { error: updateError.message },
+        { status: 500 }
+      );
+    }
 
     const meta = parseServerMetadata(
       request.headers.get("user-agent"),
@@ -101,7 +108,7 @@ export async function POST(request: Request) {
       device_type: meta.device_type,
     });
 
-    return NextResponse.json({ url: pdfUrl });
+    return NextResponse.json({ path: filePath });
   } catch (error) {
     console.error("[upload-signed-pdf] error:", error);
     return NextResponse.json(

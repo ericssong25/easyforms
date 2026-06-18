@@ -10,6 +10,7 @@ import {
 } from "@/lib/document-format";
 import { DOCUMENT_CSS, documentCssWithFonts } from "@/lib/document-styles";
 import { hasLogo, type TemplateLogo } from "@/lib/document-logo";
+import { sanitizeDocumentHtml } from "@/lib/document-sanitize";
 
 interface DocumentSheetProps {
   html: string;
@@ -58,6 +59,11 @@ export function DocumentSheet({
 
   const pageWidth = maxWidth ?? PAGE_PX.width;
   const pageHeight = PAGE_PX.height;
+  // Sanitize agent-authored content before it is injected. This is the single
+  // chokepoint for the preview, the public (unauthenticated) signing page,
+  // AND the rendered html returned by /api/verify-submission — which the
+  // client feeds back into this component for rendering.
+  const safeHtml = sanitizeDocumentHtml(html);
 
   // ---- Zoom-to-fit measurement ----
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -143,7 +149,7 @@ export function DocumentSheet({
             zIndex: 1,
           }}
           // eslint-disable-next-line react/no-danger
-          dangerouslySetInnerHTML={{ __html: html }}
+          dangerouslySetInnerHTML={{ __html: safeHtml }}
         />
 
         {showSignatureZone && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useId } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,16 @@ import {
 import { DocumentSheet } from "@/components/document/document-sheet";
 import { DEFAULT_LOGO, normalizeLogo, type TemplateLogo } from "@/lib/document-logo";
 import { toast } from "sonner";
-import { Eye, Save, ArrowLeft, Code2, Variable, Monitor } from "lucide-react";
+import {
+  Eye,
+  Save,
+  ArrowLeft,
+  Code2,
+  Variable,
+  Monitor,
+  ChevronDown,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const VARIABLE_SECTIONS: { title: string; variables: { label: string; token: string }[] }[] = [
   {
@@ -67,6 +76,11 @@ const VARIABLE_SECTIONS: { title: string; variables: { label: string; token: str
     variables: [{ label: "Today's Date", token: "{today_date}" }],
   },
 ];
+
+// Which sections are open by default on desktop.
+// Client is the largest and most-used category, so we open it and
+// collapse the rest to keep the panel short.
+const DEFAULT_OPEN_SECTIONS = new Set<string>(["Client Fields"]);
 
 interface FormBuilderProps {
   templateId?: string;
@@ -217,29 +231,21 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
   }
 
   const VariablesPanel = () => (
-    <div className="grid gap-1">
+    <div className="divide-y divide-border">
       {VARIABLE_SECTIONS.map((section) => (
-        <div key={section.title}>
-          <p className="mb-2 mt-2 text-xs font-medium text-muted-foreground first:mt-0">
-            {section.title}
-          </p>
-          {section.variables.map((v) => (
-            <button
-              key={v.token}
-              onClick={() => insertVariable(v.token)}
-              className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-slate-blue/5"
-            >
-              <span>{v.label}</span>
-              <code className="text-xs text-slate-blue">{v.token}</code>
-            </button>
-          ))}
-        </div>
+        <VariableSection
+          key={section.title}
+          title={section.title}
+          variables={section.variables}
+          defaultOpen={DEFAULT_OPEN_SECTIONS.has(section.title)}
+          onInsert={insertVariable}
+        />
       ))}
     </div>
   );
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto w-full max-w-7xl space-y-4 px-4 sm:px-6 lg:px-8">
       {/* Mobile warning */}
       <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 lg:hidden">
         <p className="flex items-center gap-2 text-sm font-medium text-amber-800">
@@ -262,7 +268,7 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-navy">
+            <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
               {templateId ? "Edit Template" : "New Template"}
             </h1>
             <p className="text-sm text-muted-foreground">
@@ -291,8 +297,8 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
-        <div>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0">
           {/* Mobile variables toggle */}
           <div className="mb-2 lg:hidden">
             <Button
@@ -304,8 +310,8 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
               {showVarsMobile ? "Hide Variables" : "Show Variables"}
             </Button>
             {showVarsMobile && (
-              <Card className="mt-2 border-slate-200">
-                <CardContent className="p-4">
+              <Card className="mt-2 border-border">
+                <CardContent className="p-3">
                   <VariablesPanel />
                 </CardContent>
               </Card>
@@ -334,7 +340,7 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
               />
             </TabsContent>
             <TabsContent value="preview" className="mt-4">
-              <div className="rounded-xl border border-slate-200 bg-slate-100 p-4">
+              <div className="rounded-xl border border-border bg-muted/30 p-4">
                 <DocumentSheet
                   html={renderPreview()}
                   logo={logo}
@@ -348,7 +354,7 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
         </div>
 
         {/* Desktop variables panel */}
-        <Card className="hidden h-fit border-slate-200 lg:block">
+        <Card className="hidden h-fit border-border lg:block">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-sm">
               <Variable className="h-4 w-4" />
@@ -358,11 +364,77 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
               Click to insert at cursor position
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             <VariablesPanel />
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
+
+// ----- Variable section (accordion-style collapsible) -----
+
+function VariableSection({
+  title,
+  variables,
+  defaultOpen,
+  onInsert,
+}: {
+  title: string;
+  variables: { label: string; token: string }[];
+  defaultOpen: boolean;
+  onInsert: (token: string) => void;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const buttonId = useId();
+  const panelId = useId();
+
+  return (
+    <div>
+      <button
+        id={buttonId}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className={cn(
+          "flex w-full items-center justify-between px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors",
+          "hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        )}
+      >
+        <span>{title}</span>
+        <span className="flex items-center gap-2">
+          <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
+            {variables.length}
+          </span>
+          <ChevronDown
+            className={cn(
+              "h-3.5 w-3.5 transition-transform duration-200",
+              open && "rotate-180"
+            )}
+          />
+        </span>
+      </button>
+      {open && (
+        <div
+          id={panelId}
+          role="region"
+          aria-labelledby={buttonId}
+          className="grid gap-0.5 px-1.5 pb-2"
+        >
+          {variables.map((v) => (
+            <button
+              key={v.token}
+              onClick={() => onInsert(v.token)}
+              title={v.token}
+              className="block w-full rounded-lg px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

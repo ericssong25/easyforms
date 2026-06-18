@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Lock, Eye, EyeOff, Shield, FileText } from "lucide-react";
+import { Lock, Eye, EyeOff, Shield, FileText, Loader } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +39,22 @@ export default function LoginPage() {
         setStep("credentials");
         return;
       }
+
+      const hasRecoveryMarker =
+        document.cookie
+          .split(";")
+          .map((c) => c.trim())
+          .some(
+            (c) =>
+              c.startsWith("pw-reset-active=") && c.slice("pw-reset-active=".length) === "1"
+          );
+
+      if (hasRecoveryMarker) {
+        router.push("/reset-password");
+        router.refresh();
+        return;
+      }
+
       const { data: aal } =
         await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
       if (aal && aal.nextLevel === "aal2" && aal.currentLevel !== aal.nextLevel) {
@@ -207,7 +223,10 @@ export default function LoginPage() {
                 disabled={loading}
               >
                 {loading ? (
-                  "Signing in..."
+                  <>
+                    <Loader className="mr-2 h-4 w-4 animate-spin" />
+                    Signing in...
+                  </>
                 ) : (
                   <>
                     <Lock className="mr-2 h-4 w-4" />
@@ -224,12 +243,9 @@ export default function LoginPage() {
             </div>
             <p className="text-xs text-muted-foreground">
               Don&apos;t have an account?{" "}
-              <Link
-                href="/signup"
-                className="font-medium text-navy hover:text-slate-blue"
-              >
-                Create one
-              </Link>
+              <span className="font-medium text-foreground">
+                Contact your administrator
+              </span>
             </p>
           </CardFooter>
         </Card>

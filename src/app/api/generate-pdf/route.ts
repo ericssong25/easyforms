@@ -8,6 +8,7 @@ import {
 import { documentCssWithFonts } from "@/lib/document-styles";
 import { hasLogo, normalizeLogo } from "@/lib/document-logo";
 import { getDmSansWoff2Base64 } from "@/lib/document-fonts.server";
+import { sanitizeDocumentHtml } from "@/lib/document-sanitize.server";
 
 export const runtime = "nodejs";
 
@@ -34,6 +35,13 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    // Sanitize the agent-authored template HTML before embedding it into
+    // the Browserless HTML payload. Browserless renders this string with a
+    // full headless browser, so an unescaped <script> or javascript: URL
+    // would execute. The signature image and CSS below are produced by
+    // trusted code and are NOT sanitized.
+    const safeHtml = sanitizeDocumentHtml(html);
 
     const dmSansBase64 = await getDmSansWoff2Base64();
     const css = documentCssWithFonts(dmSansBase64 ?? undefined);
@@ -100,7 +108,7 @@ export async function POST(request: Request) {
 <div class="ef-page">
   <div class="ef-document">
     ${logoHtml}
-    <div class="ef-document-content">${html}</div>
+    <div class="ef-document-content">${safeHtml}</div>
     <div class="ef-signature-zone" style="height:${SIGNATURE_ZONE_PX}px;">
       ${
         signature
