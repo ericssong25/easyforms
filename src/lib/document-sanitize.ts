@@ -136,5 +136,5 @@ export function sanitizeDocumentHtml(html: string): string {
       "sanitizeDocumentHtml (client) invoked on the server; use document-sanitize.server.ts instead"
     );
   }
-  return sanitizeWith(createDOMPurify(window), html);
+  return sanitizeWith(createDOMPurify(window as unknown as Parameters<typeof createDOMPurify>[0]), html);
 }
