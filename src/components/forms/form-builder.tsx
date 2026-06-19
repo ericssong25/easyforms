@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useId } from "react";
+import { useState, useEffect, useRef, useId, useCallback, memo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -128,9 +128,9 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
     }
   };
 
-  const insertVariable = (token: string) => {
+  const insertVariable = useCallback((token: string) => {
     editorRef.current?.insertText(token);
-  };
+  }, []);
 
   const renderPreview = () => {
     const today = new Date().toLocaleDateString("en-US");
@@ -230,20 +230,6 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
     );
   }
 
-  const VariablesPanel = () => (
-    <div className="divide-y divide-border">
-      {VARIABLE_SECTIONS.map((section) => (
-        <VariableSection
-          key={section.title}
-          title={section.title}
-          variables={section.variables}
-          defaultOpen={DEFAULT_OPEN_SECTIONS.has(section.title)}
-          onInsert={insertVariable}
-        />
-      ))}
-    </div>
-  );
-
   return (
     <div className="mx-auto w-full max-w-7xl space-y-4 px-4 sm:px-6 lg:px-8">
       {/* Mobile warning */}
@@ -312,7 +298,7 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
             {showVarsMobile && (
               <Card className="mt-2 border-border">
                 <CardContent className="p-3">
-                  <VariablesPanel />
+                  <VariablesPanel onInsert={insertVariable} />
                 </CardContent>
               </Card>
             )}
@@ -365,7 +351,7 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <VariablesPanel />
+            <VariablesPanel onInsert={insertVariable} />
           </CardContent>
         </Card>
       </div>
@@ -374,6 +360,26 @@ export function FormBuilder({ templateId }: FormBuilderProps) {
 }
 
 // ----- Variable section (accordion-style collapsible) -----
+
+const VariablesPanel = memo(function VariablesPanel({
+  onInsert,
+}: {
+  onInsert: (token: string) => void;
+}) {
+  return (
+    <div className="divide-y divide-border">
+      {VARIABLE_SECTIONS.map((section) => (
+        <VariableSection
+          key={section.title}
+          title={section.title}
+          variables={section.variables}
+          defaultOpen={DEFAULT_OPEN_SECTIONS.has(section.title)}
+          onInsert={onInsert}
+        />
+      ))}
+    </div>
+  );
+});
 
 function VariableSection({
   title,
