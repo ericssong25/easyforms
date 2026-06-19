@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -214,11 +214,25 @@ export function ClientWizard({ resumeClientId }: { resumeClientId?: string }) {
 
   const [dependents, setDependents] = useState<DependentForm[]>([]);
   const [clientId, setClientId] = useState<string | null>(null);
+  // Mirror of clientId kept in sync via setClientId. Used by async
+  // flows (handleSkipPolicy) that need the latest value immediately
+  // after an await — React state updates are not synchronous.
+  const clientIdRef = useRef<string | null>(null);
+  const updateClientId = (id: string | null) => {
+    clientIdRef.current = id;
+    setClientId(id);
+  };
   const [policyId, setPolicyId] = useState<string | null>(null);
 
-  // Resume: load existing client data and skip to policy step
+  // Resume: load existing client data and skip to policy step.
+  // Guarded by a ref so the effect only hydrates once per resumeClientId
+  // value, preventing it from clobbering in-flight edits if React re-fires
+  // the effect while the user is still typing.
+  const hydratedResumeRef = useRef<string | null>(null);
   useEffect(() => {
     if (!resumeClientId) return;
+    if (hydratedResumeRef.current === resumeClientId) return;
+    hydratedResumeRef.current = resumeClientId;
     const load = async () => {
       const { data: c } = await supabase
         .from("clients")
@@ -227,7 +241,7 @@ export function ClientWizard({ resumeClientId }: { resumeClientId?: string }) {
         .single();
       if (!c) return;
 
-      setClientId(c.id);
+      updateClientId(c.id);
       setClientForm({
         first_name: c.first_name || "",
         last_name: c.last_name || "",
@@ -307,17 +321,20 @@ export function ClientWizard({ resumeClientId }: { resumeClientId?: string }) {
     if (field === "ssn" && String(v).trim() && !isValidSsn(String(v))) {
       newErrors.ssn = "SSN must be exactly 9 digits";
     } else if (field === "ssn") {
-      if (!String(v).trim()) newErrors.ssn = "SSN is required";
-      else delete newErrors.ssn;
+      delete newErrors.ssn;
     }
 
-    if (field === "phone" && !String(v).trim()) {
-      newErrors.phone = "Phone number is required";
-    } else if (field === "phone") delete newErrors.phone;
+    // Phone and email are no longer individually required at the field
+    // level — the step-level check enforces "at least one contact channel".
+    // We still clear stale errors so the UI updates as the user types.
+    if (field === "phone") {
+      delete newErrors.phone;
+    }
 
     if (field === "date_of_birth") {
-      if (!String(v).trim()) newErrors.date_of_birth = "Date of birth is required";
-      else {
+      if (!String(v).trim()) {
+        delete newErrors.date_of_birth;
+      } else {
         const d = new Date(String(v));
         if (d > new Date()) newErrors.date_of_birth = "Date cannot be in the future";
         else delete newErrors.date_of_birth;
@@ -334,14 +351,18 @@ export function ClientWizard({ resumeClientId }: { resumeClientId?: string }) {
     if (clientForm.email.trim() && !isValidEmail(clientForm.email)) {
       newErrors.email = "Please enter a valid email address";
     }
-    if (!clientForm.ssn.trim() || !isValidSsn(clientForm.ssn)) {
-      newErrors.ssn = "SSN is required (9 digits)";
+    // At least one contact channel is required (email OR phone).
+    // SSN and DOB are optional — agents can capture them later from the
+    // client profile before sending a verifiable form.
+    if (
+      !clientForm.email.trim() &&
+      !clientForm.phone.replace(/\D/g, "")
+    ) {
+      newErrors.email = "Add an email or phone number";
+      newErrors.phone = "Add an email or phone number";
     }
-    if (!clientForm.phone.trim()) {
-      newErrors.phone = "Phone number is required";
-    }
-    if (!clientForm.date_of_birth.trim()) {
-      newErrors.date_of_birth = "Date of birth is required";
+    if (clientForm.ssn.trim() && !isValidSsn(clientForm.ssn)) {
+      newErrors.ssn = "SSN must be exactly 9 digits";
     }
     setErrors(newErrors);
     Object.keys(newErrors).forEach((k) => markTouched(k));
@@ -383,50 +404,94 @@ export function ClientWizard({ resumeClientId }: { resumeClientId?: string }) {
     );
   };
 
-  const handleSaveClient = async () => {
+  // Ref-based re-entrancy guard for handleSaveClient. Lives alongside
+  // `loading` (which is shared with policy/dependents handlers) so a
+  // rapid double-click on "Next: Policy Info" cannot fire two inserts
+  // even before React has flushed setLoading(true).
+  const savingClientRef = useRef(false);
+
+  const handleSaveClient = useCallback(async () => {
+    if (savingClientRef.current) return;
     if (!validateClientStep()) return;
 
+    savingClientRef.current = true;
     setLoading(true);
     try {
       const { data: existingUser } = await supabase.auth.getUser();
       if (!existingUser.user) throw new Error("Not authenticated");
 
-      const { data: client, error } = await supabase
-        .from("clients")
-        .insert({
-          agent_id: existingUser.user.id,
-          first_name: clientForm.first_name.trim(),
-          last_name: clientForm.last_name.trim(),
-          ssn_encrypted: clientForm.ssn.replace(/\D/g, ""),
-          applies_to_policy: clientForm.applies_to_policy,
-          email: clientForm.email.trim(),
-          phone: clientForm.phone.replace(/\D/g, ""),
-          address: clientForm.address.trim(),
-          city: clientForm.city.trim(),
-          state: clientForm.state.trim().toUpperCase(),
-          zip: clientForm.zip.trim(),
-          date_of_birth: clientForm.date_of_birth || null,
-          subscriber_number: clientForm.subscriber_number.trim() || null,
-          holder_income:
-            clientForm.holder_income != null && clientForm.holder_income !== 0
-              ? clientForm.holder_income
-              : null,
-          tax_filing_status: clientForm.tax_filing_status || null,
-          marital_status: clientForm.marital_status || null,
-          tax_dependents_count:
-            clientForm.tax_dependents_count != null
-              ? clientForm.tax_dependents_count
-              : null,
-        })
-        .select()
-        .single();
+      const payload = {
+        agent_id: existingUser.user.id,
+        first_name: clientForm.first_name.trim(),
+        last_name: clientForm.last_name.trim(),
+        ssn_encrypted: clientForm.ssn.replace(/\D/g, ""),
+        applies_to_policy: clientForm.applies_to_policy,
+        email: clientForm.email.trim(),
+        phone: clientForm.phone.replace(/\D/g, ""),
+        address: clientForm.address.trim(),
+        city: clientForm.city.trim(),
+        state: clientForm.state.trim().toUpperCase(),
+        zip: clientForm.zip.trim(),
+        date_of_birth: clientForm.date_of_birth || null,
+        subscriber_number: clientForm.subscriber_number.trim() || null,
+        holder_income:
+          clientForm.holder_income != null && clientForm.holder_income !== 0
+            ? clientForm.holder_income
+            : null,
+        tax_filing_status: clientForm.tax_filing_status || null,
+        marital_status: clientForm.marital_status || null,
+        tax_dependents_count:
+          clientForm.tax_dependents_count != null
+            ? clientForm.tax_dependents_count
+            : null,
+      };
 
-      if (error) throw error;
-      setClientId(client.id);
-      toast.success("Client created successfully");
+      if (clientId) {
+        const { error } = await supabase
+          .from("clients")
+          .update(payload)
+          .eq("id", clientId);
+        if (error) throw error;
+        toast.success("Client updated successfully");
+      } else {
+        const { data: client, error } = await supabase
+          .from("clients")
+          .insert(payload)
+          .select("id")
+          .single();
+        if (error) throw error;
+        updateClientId(client.id);
+        toast.success("Client created successfully");
+      }
       setStep(2);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to create client");
+      toast.error(error instanceof Error ? error.message : "Failed to save client");
+    } finally {
+      setLoading(false);
+      savingClientRef.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, clientForm, supabase]);
+
+  const handleSkipPolicy = async () => {
+    setLoading(true);
+    try {
+      // Ensure the client row exists. If we got here from a resume that
+      // loaded an existing client, handleSaveClient will UPDATE (it is
+      // idempotent). Otherwise it INSERTs and setClientId fills state.
+      if (!clientId) {
+        await handleSaveClient();
+      }
+      // After the await, React state may not have flushed yet, so read
+      // the latest value via a ref we keep in sync with setClientId.
+      const targetId = clientIdRef.current;
+      if (!targetId) {
+        toast.error("Couldn't save the client. Please review the form.");
+        return;
+      }
+      toast.success("Client saved — you can add a policy later.");
+      router.push(`/dashboard/clients/${targetId}`);
+      router.refresh();
     } finally {
       setLoading(false);
     }
@@ -601,7 +666,7 @@ export function ClientWizard({ resumeClientId }: { resumeClientId?: string }) {
               <div className="space-y-1.5">
                 <Label htmlFor="email" className="flex items-center gap-1">
                   <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                  Email
+                  Email <span className="text-xs font-normal text-muted-foreground">(or phone)</span>
                 </Label>
                 <Input
                   id="email"
@@ -618,7 +683,7 @@ export function ClientWizard({ resumeClientId }: { resumeClientId?: string }) {
               <div className="space-y-1.5">
                 <Label htmlFor="phone" className="flex items-center gap-1">
                   <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-                  Phone <span className="text-destructive">*</span>
+                  Phone <span className="text-xs font-normal text-muted-foreground">(or email)</span>
                 </Label>
                 <Input
                   id="phone"
@@ -639,7 +704,7 @@ export function ClientWizard({ resumeClientId }: { resumeClientId?: string }) {
               <div className="space-y-1.5">
                 <Label htmlFor="ssn" className="flex items-center gap-1">
                   <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-                  SSN <span className="text-destructive">*</span>
+                  SSN <span className="text-xs font-normal text-muted-foreground">(optional)</span>
                 </Label>
                 <Input
                   id="ssn"
@@ -661,7 +726,7 @@ export function ClientWizard({ resumeClientId }: { resumeClientId?: string }) {
               <div className="space-y-1.5">
                 <Label htmlFor="date_of_birth" className="flex items-center gap-1">
                   <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                  Date of Birth <span className="text-destructive">*</span>
+                  Date of Birth <span className="text-xs font-normal text-muted-foreground">(optional)</span>
                 </Label>
                 <DateInput
                   id="date_of_birth"
@@ -933,7 +998,7 @@ export function ClientWizard({ resumeClientId }: { resumeClientId?: string }) {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1">
-                  Policy Number <span className="text-destructive">*</span>
+                  Policy Number <span className="text-xs font-normal text-muted-foreground">(optional)</span>
                 </Label>
                 <Input
                   id="policy_number"
@@ -970,15 +1035,24 @@ export function ClientWizard({ resumeClientId }: { resumeClientId?: string }) {
               />
             </div>
 
-            <div className="flex justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <Button variant="outline" onClick={() => setStep(1)}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back
               </Button>
-              <Button variant="navy" onClick={handleSavePolicy} disabled={loading}>
-                {loading ? "Saving..." : "Next: Dependents"}
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+                <Button
+                  variant="ghost"
+                  onClick={handleSkipPolicy}
+                  disabled={loading}
+                >
+                  Save without policy
+                </Button>
+                <Button variant="navy" onClick={handleSavePolicy} disabled={loading}>
+                  {loading ? "Saving..." : "Next: Dependents"}
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -1000,7 +1074,17 @@ export function ClientWizard({ resumeClientId }: { resumeClientId?: string }) {
                   </CardDescription>
                 </div>
               </div>
-              <Button variant="outline" size="sm" onClick={addDependent}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={addDependent}
+                disabled={!policyId}
+                title={
+                  policyId
+                    ? "Add a dependent"
+                    : "Add a policy first to register dependents."
+                }
+              >
                 <Plus className="mr-1 h-3 w-3" />
                 Add
               </Button>
@@ -1011,7 +1095,9 @@ export function ClientWizard({ resumeClientId }: { resumeClientId?: string }) {
               <div className="rounded-xl border-2 border-dashed border-slate-200 p-8 text-center">
                 <Users className="mx-auto mb-2 h-8 w-8 text-muted-foreground/40" />
                 <p className="text-sm text-muted-foreground">
-                  No dependents added. Click &quot;Add&quot; or skip.
+                  {policyId
+                    ? "No dependents added. Click \u201cAdd\u201d or skip."
+                    : "Add a policy first to register dependents."}
                 </p>
               </div>
             ) : (
