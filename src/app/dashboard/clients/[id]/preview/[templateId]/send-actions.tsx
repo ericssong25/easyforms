@@ -32,18 +32,38 @@ export function SendActions({ clientId, templateId }: SendActionsProps) {
         .eq("id", clientId)
         .single();
 
-      const ssnRaw = client?.ssn_encrypted || "";
-      const ssnDigits = ssnRaw.replace(/\D/g, "");
-      const ssnLast4 = ssnDigits.slice(-4);
+      // Verify-before-send guard. The public /api/verify-submission route
+      // compares exactly these three fields (see route.ts):
+      //   - last_name:  must match (length > 0 + safeEq)
+      //   - ssn_last4:  must match a stored 4-digit value; if expected is
+      //                 empty, length>0 still fails, so we block here
+      //   - phone_last4: matches only if expected is non-empty
+      // A "contact only" client created via the relaxed wizard will not
+      // pass these checks, so we block the send before creating the
+      // submission row.
+      const ssnDigits = (client?.ssn_encrypted || "").replace(/\D/g, "");
+      const phoneDigits = (client?.phone || "").replace(/\D/g, "");
+      const lastNameTrimmed = (client?.last_name || "").trim();
+      const missing: string[] = [];
+      if (!lastNameTrimmed) missing.push("last name");
+      if (ssnDigits.length < 4) missing.push("SSN (4+ digits)");
+      if (phoneDigits.length < 4) missing.push("phone (4+ digits)");
+      if (missing.length > 0) {
+        toast.error(
+          `This client needs a ${missing.join(
+            ", "
+          )} before you can send a form they can verify and sign.`
+        );
+        return;
+      }
 
-      const phoneRaw = client?.phone || "";
-      const phoneDigits = phoneRaw.replace(/\D/g, "");
+      const ssnLast4 = ssnDigits.slice(-4);
       const phoneLast4 = phoneDigits.slice(-4);
 
       const verificationData = {
         ssn_last4: ssnLast4,
         phone_last4: phoneLast4,
-        last_name: (client?.last_name || "").toLowerCase().trim(),
+        last_name: lastNameTrimmed.toLowerCase(),
       };
 
       const { data: submission, error } = await supabase
