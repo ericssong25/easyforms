@@ -84,15 +84,41 @@ export function SubmissionsSearchWrapper({
   const [searching, setSearching] = React.useState(false);
   const [loadingMore, setLoadingMore] = React.useState(false);
   const queryTokenRef = React.useRef(0);
+  // Mirror of `rows.length` so runQuery can stay identity-stable while
+  // still reading the latest value for "load more" pagination. Without
+  // this, putting rows.length in useCallback deps would re-create
+  // runQuery on every list change and re-fire effects; using a ref keeps
+  // runQuery's reference stable for the entire component lifetime.
+  const rowsLengthRef = React.useRef(rows.length);
+  React.useEffect(() => {
+    rowsLengthRef.current = rows.length;
+  }, [rows.length]);
+  // Mirror of applied.search so toggleStatus and other handlers always
+  // see the latest search text without depending on `applied` directly.
+  const appliedSearchRef = React.useRef(applied.search);
+  React.useEffect(() => {
+    appliedSearchRef.current = applied.search;
+  }, [applied.search]);
+  // Mirror of applied.statuses for the same reason.
+  const appliedStatusesRef = React.useRef<SubmissionStatusFilter[]>(
+    applied.statuses
+  );
+  React.useEffect(() => {
+    appliedStatusesRef.current = applied.statuses;
+  }, [applied.statuses]);
 
   // ---- runQuery ----
+  // Identity-stable: empty deps + refs for the few values we read
+  // (rowsLengthRef). This prevents the useCallback identity churn that
+  // could otherwise re-fire the search effect or the toggleStatus
+  // closures against stale query functions.
   const runQuery = React.useCallback(
     async (q: AppliedQuery, mode: "search" | "more") => {
       const token = ++queryTokenRef.current;
       if (mode === "search") setSearching(true);
       else setLoadingMore(true);
 
-      const from = mode === "search" ? 0 : rows.length;
+      const from = mode === "search" ? 0 : rowsLengthRef.current;
       const to = from + PAGE_SIZE - 1;
 
       try {
@@ -123,56 +149,73 @@ export function SubmissionsSearchWrapper({
         }
       }
     },
-    [rows.length]
+    []
   );
 
   // ---- debounced search ----
   React.useEffect(() => {
     if (searchInput === applied.search) return;
     const handle = window.setTimeout(() => {
+      // Use refs to read the latest applied.statuses without making the
+      // effect depend on it (which would re-arm the debounce timer on
+      // every status toggle).
       void runQuery(
         {
           search: searchInput,
-          statuses: applied.statuses,
+          statuses: appliedStatusesRef.current,
         },
         "search"
       );
     }, SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(handle);
-    // We intentionally only depend on searchInput. Toggling statuses
-    // re-runs the query immediately (no debounce) via toggleStatus().
+    // runQuery is identity-stable (empty deps) and applied is read via
+    // appliedStatusesRef / appliedSearchRef. We intentionally only
+    // depend on searchInput.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput]);
 
   // ---- status toggles (auto-apply) ----
-  const toggleStatus = (s: SubmissionStatusFilter) => {
-    setPendingStatuses((prev) => {
-      const next = prev.includes(s)
-        ? prev.filter((v) => v !== s)
-        : [...prev, s];
-      // Auto-apply on toggle: status chips are simple enough that the
-      // user expects instant feedback. Search is separate (debounced).
+  // Reads the current pendingStatuses via the functional updater to
+  // compute `next` without invoking runQuery inside React's state
+  // updater (which would be a render-time side effect and could fire
+  // duplicate queries in concurrent rendering).
+  const toggleStatus = React.useCallback(
+    (s: SubmissionStatusFilter) => {
+      let next: SubmissionStatusFilter[] = [];
+      setPendingStatuses((prev) => {
+        next = prev.includes(s) ? prev.filter((v) => v !== s) : [...prev, s];
+        return next;
+      });
+      // Always derive the search arg from the LATEST applied state via
+      // a ref so the toggle never reads a stale closure of `applied`.
       void runQuery(
-        { search: applied.search, statuses: next },
+        { search: appliedSearchRef.current, statuses: next },
         "search"
       );
-      return next;
+    },
+    [runQuery]
+  );
+
+  const clearStatuses = React.useCallback(() => {
+    setPendingStatuses((prev) => {
+      if (prev.length === 0) return prev;
+      void runQuery(
+        { search: appliedSearchRef.current, statuses: [] },
+        "search"
+      );
+      return [];
     });
-  };
+  }, [runQuery]);
 
-  const clearStatuses = () => {
-    if (pendingStatuses.length === 0) return;
-    setPendingStatuses([]);
-    void runQuery({ search: applied.search, statuses: [] }, "search");
-  };
-
-  const clearSearch = () => {
+  const clearSearch = React.useCallback(() => {
     setSearchInput("");
+    // Read the CURRENT applied statuses via a ref-aware call so the
+    // clear handler is never a step behind.
     void runQuery(
-      { search: "", statuses: applied.statuses },
+      { search: "", statuses: appliedStatusesRef.current },
       "search"
     );
-  };
+  }, [runQuery]);
 
   const loadMore = () => {
     void runQuery(applied, "more");
