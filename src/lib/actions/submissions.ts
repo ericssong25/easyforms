@@ -174,19 +174,10 @@ async function loadStatusCounts(
   agentId: string,
   clientIdFilter: string[] | null
 ): Promise<Record<SubmissionStatusFilter, number>> {
-  let cq = supabase
-    .from("form_submissions")
-    .select("status", { count: "exact", head: true })
-    .eq("agent_id", agentId);
-
-  if (clientIdFilter) {
-    if (clientIdFilter.length === 0) {
-      return { draft: 0, sent: 0, opened: 0, signed: 0 };
-    }
-    cq = cq.in("client_id", clientIdFilter);
-  }
-
-  // No status filter — we want counts across all statuses.
+  // Counts are computed over the FULL agent universe (optionally
+  // narrowed by the active text search via client_id), but NEVER
+  // narrowed by the active status filter — otherwise the chip badges
+  // would collapse to "0" on every non-zero selection.
 
   const out: Record<SubmissionStatusFilter, number> = {
     draft: 0,
@@ -195,11 +186,27 @@ async function loadStatusCounts(
     signed: 0,
   };
 
-  // Run four small count queries in parallel.
+  // Factory: builds a fresh query each time so concurrent awaiters
+  // never share/alias the same builder.
+  const buildCountQuery = (status: SubmissionStatusFilter) => {
+    let q = supabase
+      .from("form_submissions")
+      .select("status", { count: "exact", head: true })
+      .eq("agent_id", agentId)
+      .eq("status", status);
+    if (clientIdFilter && clientIdFilter.length > 0) {
+      q = q.in("client_id", clientIdFilter);
+    }
+    return q;
+  };
+
+  // Run four small count queries in parallel. Each call builds its own
+  // query from scratch (via a factory) so there's zero chance of a
+  // shared/aliased builder mutating under concurrent awaiters.
   const settled = await Promise.all(
     VALID_STATUSES.map(async (s) => {
       try {
-        const { count, error } = await cq.eq("status", s);
+        const { count, error } = await buildCountQuery(s);
         if (error) {
           console.error(
             "[querySubmissionsAction] status count failed:",
@@ -219,3 +226,4 @@ async function loadStatusCounts(
   }
   return out;
 }
+
